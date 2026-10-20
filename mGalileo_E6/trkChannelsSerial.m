@@ -114,6 +114,23 @@ PDIcode = settings.intTime;
 % Number of acquired signals
 TrackedNr = nnz([channel.status]== 'T');
 
+% Select the CPU SIMD backend once before entering the tracking loops.
+% computer('arch') identifies the architecture of the running MATLAB.
+if settings.correlatorType == 1
+    arch = computer('arch');
+    switch arch
+        case {'win64', 'glnxa64', 'maci64'}
+            % Compile the MEX file with: mex corrX86SIMDSerialQPSK.cpp
+            simdCorrelator = @corrX86SIMDSerialQPSK;
+        case 'maca64'
+            % Compile the MEX file with: mex corrNeonSIMDSerialQPSK.cpp
+            simdCorrelator = @corrNeonSIMDSerialQPSK;
+        otherwise
+            error('trkChannelsSerial:UnsupportedArchitecture', ...
+                'Unsupported MATLAB architecture for the SIMD correlator: %s.', arch);
+    end
+end
+
 % Start waitbar
 hwb = waitbar(0,'Tracking...');
 
@@ -263,8 +280,8 @@ for channelNr = 1:settings.numberOfChannels
                     E6CodeTable, remCarrPhase, carrPhaseStep, remCodePhase,...
                     codePhaseStep);
             elseif settings.correlatorType == 1 % Using SIMD of CPU
-                % Compile the MEX file with: mex corrSIMDSerialQPSK.cpp
-                correValues = corrSIMDSerialQPSK(settings,rawSignal, ...
+                % Use the CPU SIMD backend selected for the running MATLAB architecture.
+                correValues = simdCorrelator(settings,rawSignal, ...
                     E6CodeTable, remCarrPhase,carrPhaseStep,remCodePhase, ...
                     codePhaseStep);
             elseif settings.correlatorType == 2 % Using GPU
@@ -408,4 +425,5 @@ end % for channelNr
 
 % Close the waitbar
 close(hwb)
-clear corrSIMDSerialQPSK corrGPUSerialQPSK;
+clear simdCorrelator;
+clear corrX86SIMDSerialQPSK corrNeonSIMDSerialQPSK corrGPUSerialQPSK;

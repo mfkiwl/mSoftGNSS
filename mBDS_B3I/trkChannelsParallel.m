@@ -137,6 +137,23 @@ PDIcarr = settings.intTime;
 [tau1carr, tau2carr] = calcLoopCoef(settings.pllNoiseBandwidth, ...
     settings.pllDampingRatio, 0.25);
 
+% Select the CPU SIMD backend once before entering the tracking loops.
+% computer('arch') identifies the architecture of the running MATLAB.
+if settings.correlatorType == 1
+    arch = computer('arch');
+    switch arch
+        case {'win64', 'glnxa64', 'maci64'}
+            % Compile the MEX file with: mex corrX86SIMDParallelBPSK.cpp
+            simdCorrelator = @corrX86SIMDParallelBPSK;
+        case 'maca64'
+            % Compile the MEX file with: mex corrNeonSIMDParallelBPSK.cpp
+            simdCorrelator = @corrNeonSIMDParallelBPSK;
+        otherwise
+            error('trkChannelsParallel:UnsupportedArchitecture', ...
+                'Unsupported MATLAB architecture for the SIMD correlator: %s.', arch);
+    end
+end
+
 %% Initialize waitbar and variables for data reading ==============
 % -------- Initialize waitbar ---------------------------------------------
 hwb = waitbar(0,'Tracking...');
@@ -256,8 +273,8 @@ for loopCnt =  1:codePeriods
             remCarrPhase,carrPhaseStep,remCodePhase,codePhaseStep,...
             startIdx,chSampSize,isDataRead);
     elseif settings.correlatorType == 1 % Using SIMD of CPU
-        % Compile the MEX file with: mex corrSIMDParallelBPSK.cpp
-        correValues = corrSIMDParallelBPSK(settings,rawSignal,B3ICodeTable, ...
+        % Use the CPU SIMD backend selected for the running MATLAB architecture.
+        correValues = simdCorrelator(settings,rawSignal,B3ICodeTable, ...
             remCarrPhase,carrPhaseStep,remCodePhase,codePhaseStep,...
             int32(startIdx),int32(chSampSize),isDataRead);
     elseif settings.correlatorType == 2 % Using GPU
@@ -353,4 +370,5 @@ for loopCnt =  1:codePeriods
 end % for loopCnt
 % Close the waitbar
 close(hwb)
-clear corrSIMDParallelBPSK corrGPUParallelBPSK;
+clear simdCorrelator;
+clear corrX86SIMDParallelBPSK corrNeonSIMDParallelBPSK corrGPUParallelBPSK;

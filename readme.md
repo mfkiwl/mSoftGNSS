@@ -146,8 +146,8 @@ Common layout inside each receiver folder
                               least-squares positioning, and loop coefficients.
 
 Shared correlator backends in ./native_Correlators
-    corrSIMDSerial*.cpp       SIMD serial tracking correlator source files.
-    corrSIMDParallel*.cpp     SIMD channel-parallel tracking correlator source files.
+    corrX86SIMDSerial*.cpp       SIMD serial tracking correlator source files.
+    corrX86SIMDParallel*.cpp     SIMD channel-parallel tracking correlator source files.
     corrGPUSerial*.cu         CUDA serial tracking correlator source files.
     corrGPUParallel*.cu       CUDA channel-parallel tracking correlator source files.
     corrGPUParallelFused*.cu  CUDA fused channel-parallel tracking correlator

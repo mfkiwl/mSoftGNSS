@@ -59,8 +59,8 @@ settings.dataType           = 'int16';
 %2 - complex samples: I0,Q0,I1,Q1,I2,Q2,...                      
 settings.fileType           = 2;
 % Intermediate, sampling and code frequencies
-settings.IF                 = 8.52e6;     % [Hz]
-settings.samplingFreq       = 70e6;            % [Hz]
+settings.IF                 = 0e6;        % [Hz]
+settings.samplingFreq       = 30e6;            % [Hz]
 
 % Define number of chips in a code period and code frequencies
 settings.codeLength         = 10230;         % Beidou B3I  has 10230 chip length 

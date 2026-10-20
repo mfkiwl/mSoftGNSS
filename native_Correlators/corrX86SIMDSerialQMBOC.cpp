@@ -1,6 +1,6 @@
 /*================================================================================
- * Filename: corrSIMDSerialBPSK.cpp
- * Description: SIMD-assisted single-channel tracking correlator for
+ * Filename: corrX86SIMDSerialQMBOC.cpp
+ * Description: SIMD-assisted single-channel QMBOC tracking correlator for
  *              trkChannelsSerial.m.
  *
  * Authors: Yafeng Li (School of Automation, Beijing Information Science and Technology University)
@@ -44,8 +44,8 @@ typedef struct
 /* Function declaration ---------------------------------------------------------
  * mixCarrReal()        : mix local carrier with real IF data
  * mixCarrComplex()     : mix local carrier with complex IF data
- * localCodeGen()       : generate early/prompt/late local code sequences
- * correlator()         : compute IE/QE/IP/QP/IL/QL correlation outputs
+ * localCodeGen()       : generate data/pilot BOC(1,1)/pilot BOC(6,1) EPL local code sequences
+ * correlator()         : compute one branch of IE/QE/IP/QP/IL/QL correlation outputs
  * cleanup()            : release persistent host buffers when the MEX function is cleared
  * checkedMalloc()      : allocate non-aligned host memory and stop execution if allocation fails
  * checkedAlignedMalloc(): allocate 32-byte aligned host memory for SIMD buffers
@@ -72,13 +72,14 @@ static void checkInputs(int nlhs, int nrhs, const mxArray* prhs[]);
 #define PI          3.1415926535897932  // pi 
 #define DPI         (2.0*PI)            // 2*pi 
 #define CSCALE      (1.0/16.0)          // carrier lookup table scale (LSB) 
+#define LOCAL_CODE_COUNT 9              // 3 branches x Early/Prompt/Late
 
 /* Persistent buffers -----------------------------------------------------------
  * initialized     : initialization flag for persistent buffers
  * iBasebandSignal : in-phase baseband samples after carrier wipeoff
  * qBasebandSignal : quadrature baseband samples after carrier wipeoff
  * rawSignalI/Q    : split I/Q branches for complex input data
- * localCode       : local code buffers for early, prompt and late replicas
+ * localCode       : local code buffers for data/pilot BOC(1,1)/pilot BOC(6,1) EPL replicas
  * settings        : cached receiver settings parsed from MATLAB struct
  *------------------------------------------------------------------------------*/
 static int initialized = 0;
@@ -92,12 +93,15 @@ static Settings settings;
 /* The gateway function --------------------------------------------------------
  * Args   : prhs[0] settings      I   receiver settings structure
  *          prhs[1] rawSignal     I   one code-period IF block for one channel
- *          prhs[2] caCode        I   one PRN code vector [lastChip code firstChip]
+ *          prhs[2] caCode        I   one PRN code vector [B1CData pilotBOC11 pilotBOC61]
+ *                                 where each branch is stored as [lastChip code firstChip]
  *          prhs[3] remCarrPhase  I   residual carrier phase (rad)
  *          prhs[4] carrPhaseStep I   carrier phase step (rad/sample)
  *          prhs[5] remCodePhase  I   residual code phase (chips)
  *          prhs[6] codePhaseStep I   code phase step (chips/sample)
- * Return : plhs[0] correValues   O   [IE QE IP QP IL QL]
+ * Return : plhs[0] correValues   O   [data E/P/L I/Q,
+ *                                     pilotBOC11 E/P/L I/Q,
+ *                                     pilotBOC61 E/P/L I/Q]
  *------------------------------------------------------------------------------*/
 void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 {
@@ -107,7 +111,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 	double* corrValues;
 
 	/* --------------------- One-time persistent buffer allocation ---------------------
-	   Keep this framework close to corrSIMDParallelBPSK.cpp: allocate once on the first call
+	   Keep this framework close to corrX86SIMDParallelBPSK.cpp: allocate once on the first call
 	   and reuse the same aligned buffers on later code periods. The serial wrapper
 	   intentionally avoids per-call allocation and also avoids dynamic reallocation. */
 	if (!initialized) {
@@ -124,8 +128,8 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 		iBasebandSignal = (short*)checkedAlignedMalloc(sizeof(short) * rawSignalLen, "iBasebandSignal");
 		qBasebandSignal = (short*)checkedAlignedMalloc(sizeof(short) * rawSignalLen, "qBasebandSignal");
 
-		localCode = (short**)checkedMalloc(sizeof(short*) * 3, "localCode");
-		for (int i = 0; i < 3; ++i) {
+		localCode = (short**)checkedMalloc(sizeof(short*) * LOCAL_CODE_COUNT, "localCode");
+		for (int i = 0; i < LOCAL_CODE_COUNT; ++i) {
 			localCode[i] = (short*)checkedAlignedMalloc(sizeof(short) * rawSignalLen, "localCode[i]");
 		}
 
@@ -142,7 +146,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 	}
 
 	/* ----------------- Unpack the scalar serial inputs -----------------
-	   Unlike corrSIMDParallelBPSK.cpp, this wrapper serves one channel and one code period
+	   Unlike corrX86SIMDParallelBPSK.cpp, this wrapper serves one channel and one code period
 	   per call, so every phase/code parameter is a scalar instead of a channel array. 
      * Input order:
      *   prhs[0]  - settings
@@ -164,7 +168,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 	if (settings.fileType == 2) {
 		blksize = blksize / 2;
 		/* Split the interleaved serial rawSignal block into separate I/Q buffers so the
-		   complex SIMD mixer can reuse the exact same implementation as corrSIMDParallelBPSK.cpp. */
+		   complex SIMD mixer can reuse the exact same implementation as corrX86SIMDParallelBPSK.cpp. */
 		for (size_t k = 0; k < blksize; ++k) {
 			rawSignalI[k] = rawSignal[2 * k];
 			rawSignalQ[k] = rawSignal[2 * k + 1];
@@ -173,9 +177,9 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 
 	/* --------------------- Initialize output and run the three-stage core ---------------------
 	   The output layout follows trkChannelsSerial.m directly:
-	     [IE QE IP QP IL QL]
+	     [data E/P/L I/Q, pilotBOC11 E/P/L I/Q, pilotBOC61 E/P/L I/Q]
 	   and the processing stages are intentionally unchanged from the shared SIMD core. */
-	plhs[0] = mxCreateDoubleMatrix(1, 6, mxREAL);
+	plhs[0] = mxCreateDoubleMatrix(1, 2 * LOCAL_CODE_COUNT, mxREAL);
 	corrValues = (double*)mxGetData(plhs[0]);
 
 	if (settings.fileType == 1) {
@@ -183,9 +187,14 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 	} else {
 		mixCarrComplex(rawSignalI, rawSignalQ, carrPhaseStep, remCarrPhase, (mwSize)blksize, iBasebandSignal, qBasebandSignal);
 	}
-	size_t codeLen = mxGetNumberOfElements(prhs[2]);
+	size_t codeLen = mxGetNumberOfElements(prhs[2]) / 3;
 	localCodeGen(caCode, (mwSize)codeLen, remCodePhase, codePhaseStep, settings.earlyLateSpc, (mwSize)blksize, localCode);
+	// For data branch
 	correlator(iBasebandSignal, qBasebandSignal, localCode, (mwSize)blksize, corrValues);
+	// For pilot BOC(1,1) branch
+	correlator(iBasebandSignal, qBasebandSignal, localCode+3, (mwSize)blksize, corrValues+6);
+	// For pilot BOC(6,1) branch
+	correlator(iBasebandSignal, qBasebandSignal, localCode+6, (mwSize)blksize, corrValues+12);
 }
 
 /* Mix local carrier for real data -----------------------------------------------
@@ -454,14 +463,19 @@ void mixCarrComplex(const short* rawSignalI, const short* rawSignalQ, double car
 }
 
  /* Generate local code ----------------------------------------------------------
- * Generate local code sequences
- * Args   : int     *caCode          I   int32 GPS L1 PRN code sequence 
- *          mwSize codeLen           I   chip number of the PRN code
+ * Generate local code sequences for the QMBOC data, pilot BOC(1,1), and
+ * pilot BOC(6,1) branches.
+ * Args   : int     *caCode          I   int32 concatenated QMBOC code table
+ *                                      [B1CData(last,1..N,first),
+ *                                       pilotBOC11(last,1..N,first),
+ *                                       pilotBOC61(last,1..N,first)]
+ *          mwSize codeLen           I   chip number of one branch
  *          double remCodePhase      I   initial code phase (chip)
  *          double codePhaseStep     I   code sampling interval (chip)
  *          double earlyLateSpc      I   half of the early-late code correlation spacing (chips)
  *          int    blksize           I   number of samples to be generated 
- *          short  *localCode        O   local code replica outputs
+ *          short  *localCode        O   local code replica outputs arranged as
+ *                                      {data E/P/L, pilotBOC11 E/P/L, pilotBOC61 E/P/L}
  * return : None 
  *------------------------------------------------------------------------------*/
 void localCodeGen(const int *caCode, mwSize codeLen, double remCodePhase, double codePhaseStep,
@@ -472,12 +486,21 @@ void localCodeGen(const int *caCode, mwSize codeLen, double remCodePhase, double
 	remCodePhase = remCodePhase - earlyLateSpc + 1.0;
 	if (remCodePhase >= codeLen)
 		remCodePhase -= floor(remCodePhase / codeLen)*codeLen;
+	/* Keep the large integer part of the code phase out of AVX float
+	   arithmetic. Long QMBOC codes can pass million-chip
+	   absolute phases; converting that whole value to float loses fractional
+	   chip precision. */
+	const int codeIndexBase = (int)floor(remCodePhase);
+	remCodePhase -= (double)codeIndexBase;
 	
-	/* caCode is laid out as [lastChip, code(1..1023), firstChip]. Shifting the
-	   starting phase by -earlyLateSpc + 1.0 means the early replica can safely
-	   address one chip before the nominal prompt position, and the late replica
-	   can safely walk one chip beyond the end without needing modulo per sample. */
-	short *eCode = localCode[0], *pCode = localCode[1], * lCode = localCode[2];
+	/* caCode is laid out as [B1CData(last,1..N,first), pilotBOC11(last,1..N,first),
+	   pilotBOC61(last,1..N,first)].
+	   Shifting the starting phase by -earlyLateSpc + 1.0 means the early replica
+	   can safely address one chip before the nominal prompt position, and the late
+	   replica can safely walk one chip beyond the end without needing modulo per sample. */
+	short *eCodeD = localCode[0], *pCodeD = localCode[1], * lCodeD = localCode[2];
+	short* eCodeP11 = localCode[3], * pCodeP11 = localCode[4], * lCodeP11 = localCode[5];
+	short* eCodeP61 = localCode[6], * pCodeP61 = localCode[7], * lCodeP61 = localCode[8];
 
 	__m256i Index_reg1, Index_reg2, EPL_reg;
 	__m256 codePhase_reg1, codePhase_reg2;
@@ -489,8 +512,12 @@ void localCodeGen(const int *caCode, mwSize codeLen, double remCodePhase, double
 	const __m256 earlyLateSpc_reg = _mm256_set1_ps((float)earlyLateSpc);
 	const __m256 sixteenStep = _mm256_set1_ps(16.0f);
 	const __m256 eightCodePhase = _mm256_set1_ps((float)(codePhaseStep * 8.0));
+	const __m256i codeIndexBase_reg = _mm256_set1_epi32(codeIndexBase);
 
-	for ( ; eCode <= localCode[0] + blksize - 16; eCode += 16, pCode += 16, lCode += 16)
+	for ( ; eCodeD <= localCode[0] + blksize - 16;
+        eCodeD += 16, pCodeD += 16, lCodeD += 16,
+        eCodeP11 += 16, pCodeP11 += 16, lCodeP11 += 16,
+        eCodeP61 += 16, pCodeP61 += 16, lCodeP61 += 16)
 	{
 		/* ----------------------- Early code generation ----------------------- */
 		/* Generate the code phase of 16 successive samples. Because the phase is
@@ -500,10 +527,18 @@ void localCodeGen(const int *caCode, mwSize codeLen, double remCodePhase, double
 		codePhase_reg2 = _mm256_add_ps(codePhase_reg1, eightCodePhase);
 		Index_reg1 = _mm256_cvttps_epi32(codePhase_reg1);
 		Index_reg2 = _mm256_cvttps_epi32(codePhase_reg2);
+		Index_reg1 = _mm256_add_epi32(Index_reg1, codeIndexBase_reg);
+		Index_reg2 = _mm256_add_epi32(Index_reg2, codeIndexBase_reg);
 		/* Gather 16 local-code chips directly from the int32 code table,
 		   then pack them back to int16 so correlator() can keep using madd_epi16. */
 		EPL_reg = gatherCode16(caCode, Index_reg1, Index_reg2);
-		_mm256_store_si256((__m256i*)eCode, EPL_reg);
+		_mm256_store_si256((__m256i*)eCodeD, EPL_reg);
+
+		/* Pilot BOC(1,1) and BOC(6,1) early branches use the second and third code-table spans. */
+		EPL_reg = gatherCode16(caCode + codeLen, Index_reg1, Index_reg2);
+		_mm256_store_si256((__m256i*)eCodeP11, EPL_reg);
+		EPL_reg = gatherCode16(caCode + 2 * codeLen, Index_reg1, Index_reg2);
+		_mm256_store_si256((__m256i*)eCodeP61, EPL_reg);
 
 		/* ----------------------- Prompt code generation ----------------------- */
 		/* Prompt is just Early shifted by +earlyLateSpc chips. */
@@ -511,17 +546,30 @@ void localCodeGen(const int *caCode, mwSize codeLen, double remCodePhase, double
 		codePhase_reg2 = _mm256_add_ps(codePhase_reg2, earlyLateSpc_reg);
 		Index_reg1 = _mm256_cvttps_epi32(codePhase_reg1);
 		Index_reg2 = _mm256_cvttps_epi32(codePhase_reg2);
+		Index_reg1 = _mm256_add_epi32(Index_reg1, codeIndexBase_reg);
+		Index_reg2 = _mm256_add_epi32(Index_reg2, codeIndexBase_reg);
 		EPL_reg = gatherCode16(caCode, Index_reg1, Index_reg2);
-		_mm256_store_si256((__m256i*)pCode, EPL_reg);
+		_mm256_store_si256((__m256i*)pCodeD, EPL_reg);
 
+		EPL_reg = gatherCode16(caCode + codeLen, Index_reg1, Index_reg2);
+		_mm256_store_si256((__m256i*)pCodeP11, EPL_reg);
+		EPL_reg = gatherCode16(caCode + 2 * codeLen, Index_reg1, Index_reg2);
+		_mm256_store_si256((__m256i*)pCodeP61, EPL_reg);
 		/* ----------------------- Late code generation ----------------------- */
 		/* Late is Prompt shifted once more by +earlyLateSpc, i.e. Early + 2*spacing. */
 		codePhase_reg1 = _mm256_add_ps(codePhase_reg1, earlyLateSpc_reg);
 		codePhase_reg2 = _mm256_add_ps(codePhase_reg2, earlyLateSpc_reg);
 		Index_reg1 = _mm256_cvttps_epi32(codePhase_reg1);
 		Index_reg2 = _mm256_cvttps_epi32(codePhase_reg2);
+		Index_reg1 = _mm256_add_epi32(Index_reg1, codeIndexBase_reg);
+		Index_reg2 = _mm256_add_epi32(Index_reg2, codeIndexBase_reg);
 		EPL_reg = gatherCode16(caCode, Index_reg1, Index_reg2);
-		_mm256_store_si256((__m256i*)lCode, EPL_reg);
+		_mm256_store_si256((__m256i*)lCodeD, EPL_reg);
+
+		EPL_reg = gatherCode16(caCode + codeLen, Index_reg1, Index_reg2);
+		_mm256_store_si256((__m256i*)lCodeP11, EPL_reg);
+		EPL_reg = gatherCode16(caCode + 2 * codeLen, Index_reg1, Index_reg2);
+		_mm256_store_si256((__m256i*)lCodeP61, EPL_reg);
 
 		/* Move to the next batch of 16 code samples. */
 		stepNumber_reg = _mm256_add_ps(stepNumber_reg, sixteenStep);
@@ -531,23 +579,32 @@ void localCodeGen(const int *caCode, mwSize codeLen, double remCodePhase, double
 	/* Recreate the code phase at the first leftover sample after the SIMD loop. */
 	double tempCodePhase = (blksize / 16) * 16 * codePhaseStep + remCodePhase;
 	double twoEarlyLateSpc = earlyLateSpc * 2;
-	for (; eCode < localCode[0] + blksize; ++eCode, ++pCode, ++lCode)
+	for (; eCodeD < localCode[0] + blksize;
+        ++eCodeD, ++pCodeD, ++lCodeD,
+        ++eCodeP11, ++pCodeP11, ++lCodeP11,
+        ++eCodeP61, ++pCodeP61, ++lCodeP61)
 	{
-		/* Scalar tail keeps the same Early/Prompt/Late geometry as the SIMD path. */
-		eCode[0] = caCode[(int)tempCodePhase];
-		pCode[0] = caCode[(int)(tempCodePhase + earlyLateSpc)];
-		lCode[0] = caCode[(int)(tempCodePhase + twoEarlyLateSpc)];
+		/* Scalar tail keeps the same data/pilot Early/Prompt/Late geometry as the SIMD path. */
+		eCodeD[0] = caCode[codeIndexBase + (int)tempCodePhase];
+		pCodeD[0] = caCode[codeIndexBase + (int)(tempCodePhase + earlyLateSpc)];
+		lCodeD[0] = caCode[codeIndexBase + (int)(tempCodePhase + twoEarlyLateSpc)];
+		eCodeP11[0] = caCode[codeLen + codeIndexBase + (int)tempCodePhase];
+		pCodeP11[0] = caCode[codeLen + codeIndexBase + (int)(tempCodePhase + earlyLateSpc)];
+		lCodeP11[0] = caCode[codeLen + codeIndexBase + (int)(tempCodePhase + twoEarlyLateSpc)];
+		eCodeP61[0] = caCode[2 * codeLen + codeIndexBase + (int)tempCodePhase];
+		pCodeP61[0] = caCode[2 * codeLen + codeIndexBase + (int)(tempCodePhase + earlyLateSpc)];
+		lCodeP61[0] = caCode[2 * codeLen + codeIndexBase + (int)(tempCodePhase + twoEarlyLateSpc)];
 		tempCodePhase += codePhaseStep;
 	}
 }
 
 /* Correlating function ------------------------------------------------------------
- * Mix local carrier to input signal
+ * Correlate one branch of local code replicas with the carrier-wiped baseband signal.
  * Args :   short  *iBasebandSignal    I   I component of input signal with carrier wiped off
  *          short  *qBasebandSignal    I   Q component of input signal with carrier wiped off
- *          short  **localCode         I   local code sequences
+ *          short  **localCode         I   one three-replica branch {E, P, L}
  *          mwSize blksize             I   number of samples to be generated
- *          double *corrValues        O   outputs of correlator values arranged as [IE QE IP QP IL QL] 
+ *          double *corrValues         O   outputs of one branch arranged as [I_E Q_E I_P Q_P I_L Q_L]
  * Return : None
  *------------------------------------------------------------------------------*/
 void correlator(short *iBasebandSignal, short *qBasebandSignal, short **localCode, mwSize blksize, double *corrValues)
@@ -631,8 +688,9 @@ void correlator(short *iBasebandSignal, short *qBasebandSignal, short **localCod
 		I_L += (long long)pI[0] * (long long)lCode[0];
 		Q_L += (long long)pQ[0] * (long long)lCode[0];
 	}
-	/* Convert the six correlator outputs to double precision and undo the 16x
-	   carrier LUT amplitude scaling introduced during carrier wipeoff. */
+	/* Convert one EPL branch's six I/Q outputs to double precision and undo the 16x
+	   carrier LUT amplitude scaling introduced during carrier wipeoff. The caller
+	   invokes this function once each for data, pilot BOC(1,1), and pilot BOC(6,1). */
     corrValues[0] = (double)I_E * CSCALE;
     corrValues[1] = (double)Q_E * CSCALE;
     corrValues[2] = (double)I_P * CSCALE;
@@ -787,6 +845,10 @@ static void checkInputs(int nlhs, int nrhs, const mxArray* prhs[])
 	if (!mxIsInt32(prhs[2]) || mxIsComplex(prhs[2])) {
 		mexErrMsgIdAndTxt("simdCorr:type", "caCode must be a real int32 array.");
 	}
+    if ((mxGetNumberOfElements(prhs[2]) % 3) != 0) {
+        mexErrMsgIdAndTxt("simdCorr:type",
+            "caCode must contain concatenated [B1CData pilotBOC11 pilotBOC61], so its length must be divisible by 3.");
+	}
 	for (int k = 3; k <= 6; ++k) {
 		if (!mxIsDouble(prhs[k]) || mxIsComplex(prhs[k]) || mxGetNumberOfElements(prhs[k]) != 1) {
 			mexErrMsgIdAndTxt("simdCorr:type", "Phase-related inputs must be real double scalars.");
@@ -804,7 +866,7 @@ void cleanup(void)
 
 	/* --------------- Free memory --------------- */
 	if (localCode != NULL) {
-		for (int i = 0; i < 3; ++i) {
+		for (int i = 0; i < LOCAL_CODE_COUNT; ++i) {
 			if (localCode[i] != NULL) {
 				_mm_free(localCode[i]);
 				localCode[i] = NULL;

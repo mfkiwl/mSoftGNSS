@@ -132,8 +132,8 @@ Directory and Files
                               坐标转换、最小二乘定位和环路参数计算。
 
 ./native_Correlators 中的共用相关器后端
-    corrSIMDSerial*.cpp       SIMD 通道串行跟踪相关器源码。
-    corrSIMDParallel*.cpp     SIMD 通道并行跟踪相关器源码。
+    corrX86SIMDSerial*.cpp       SIMD 通道串行跟踪相关器源码。
+    corrX86SIMDParallel*.cpp     SIMD 通道并行跟踪相关器源码。
     corrGPUSerial*.cu         CUDA 通道串行跟踪相关器源码。
     corrGPUParallel*.cu       CUDA 通道并行跟踪相关器源码。
     corrGPUParallelFused*.cu  CUDA fused 通道并行跟踪相关器源码。

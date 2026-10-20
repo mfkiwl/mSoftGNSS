@@ -88,7 +88,7 @@ settings.acqSearchStep      = 1/0.02*2/3;         % [Hz]
 
 %% Tracking loops settings ========================================
 % Enable/disable use of SIMD/GPU MEX to accelerate tracking
-settings.trkMode                 = 0;   % 0 - Channel-serial tracking; 
+settings.trkMode                 = 1;   % 0 - Channel-serial tracking; 
                                         % 1 - Channel-parallel tracking;
 % Enable/disable use of SIMD/GPU MEX to accelerate tracking
 settings.correlatorType          = 2;   % 0 - Matlab correlator; 

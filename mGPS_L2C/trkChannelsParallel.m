@@ -165,6 +165,23 @@ PDIcarr = settings.intTime;
 [tau1carr, tau2carr] = calcLoopCoef(settings.pllNoiseBandwidth, ...
     settings.pllDampingRatio, 1.0);
 
+% Select the CPU SIMD backend once before entering the tracking loops.
+% computer('arch') identifies the architecture of the running MATLAB.
+if settings.correlatorType == 1
+    arch = computer('arch');
+    switch arch
+        case {'win64', 'glnxa64', 'maci64'}
+            % Compile the MEX file with: mex corrX86SIMDParallelQPSK.cpp
+            simdCorrelator = @corrX86SIMDParallelQPSK;
+        case 'maca64'
+            % Compile the MEX file with: mex corrNeonSIMDParallelQPSK.cpp
+            simdCorrelator = @corrNeonSIMDParallelQPSK;
+        otherwise
+            error('trkChannelsParallel:UnsupportedArchitecture', ...
+                'Unsupported MATLAB architecture for the SIMD correlator: %s.', arch);
+    end
+end
+
 %% Initialize waitbar and variables for data reading ==============
 % -------- Initialize waitbar ---------------------------------------------
 hwb = waitbar(0,'Tracking...');
@@ -294,8 +311,8 @@ for loopCnt =  1:NumToProcess
             remCarrPhase,carrPhaseStep,remCodePhaseL2C,codePhaseStep,...
             startIdx,chSampSize,isDataRead);
     elseif settings.correlatorType == 1 % Using SIMD of CPU
-        % Compile the MEX file with: mex corrSIMDParallelQPSK.cpp
-        correValues = corrSIMDParallelQPSK(settings,rawSignal,L2CodeTable, ...
+        % Use the CPU SIMD backend selected for the running MATLAB architecture.
+        correValues = simdCorrelator(settings,rawSignal,L2CodeTable, ...
             remCarrPhase,carrPhaseStep,remCodePhaseL2C,codePhaseStep,...
             int32(startIdx),int32(chSampSize),isDataRead);
     elseif settings.correlatorType == 2 % Using GPU
@@ -450,4 +467,5 @@ for loopCnt =  1:NumToProcess
 end % for loopCnt
 % Close the waitbar
 close(hwb)
-clear corrSIMDParallelQPSK corrGPUParallelQPSK;
+clear simdCorrelator;
+clear corrX86SIMDParallelQPSK corrNeonSIMDParallelQPSK corrGPUParallelQPSK;

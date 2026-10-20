@@ -167,6 +167,23 @@ elseif settings.correlatorType == 2
     L1CCodeTable = int8(L1CCodeTable');
 end
 
+% Select the CPU SIMD backend once before entering the tracking loops.
+% computer('arch') identifies the architecture of the running MATLAB.
+if settings.correlatorType == 1
+    arch = computer('arch');
+    switch arch
+        case {'win64', 'glnxa64', 'maci64'}
+            % Compile the MEX file with: mex corrX86SIMDParallelQPSK.cpp
+            simdCorrelator = @corrX86SIMDParallelQPSK;
+        case 'maca64'
+            % Compile the MEX file with: mex corrNeonSIMDParallelQPSK.cpp
+            simdCorrelator = @corrNeonSIMDParallelQPSK;
+        otherwise
+            error('trkChannelsParallel:UnsupportedArchitecture', ...
+                'Unsupported MATLAB architecture for the SIMD correlator: %s.', arch);
+    end
+end
+
 %% Initialize waitbar and variables for data reading ==============
 % -------- Initialize waitbar ---------------------------------------------
 hwb = waitbar(0,'Tracking...');
@@ -292,9 +309,9 @@ for loopCnt =  1:NumToProcess
             remCarrPhase,carrPhaseStep,remCodePhase*12,codePhaseStep*12,...
             startIdx,chSampSize,isDataRead);
     elseif settings.correlatorType == 1 % Using SIMD of CPU
-        % Compile with: mex corrSIMDParallelQPSK.cpp
+        % Use the CPU SIMD backend selected for the running MATLAB architecture.
         % Uses the same QPSK interface and 12x code phase units.
-        correValues = corrSIMDParallelQPSK(settings,rawSignal,L1CCodeTable, ...
+        correValues = simdCorrelator(settings,rawSignal,L1CCodeTable, ...
             remCarrPhase,carrPhaseStep,remCodePhase*12,codePhaseStep*12,...
             int32(startIdx),int32(chSampSize),isDataRead);
     elseif settings.correlatorType == 2 % Using GPU
@@ -441,4 +458,5 @@ for loopCnt =  1:NumToProcess
 end % for loopCnt
 % Close the waitbar
 close(hwb)
-clear corrSIMDParallelQPSK corrGPUParallelQPSK;
+clear simdCorrelator;
+clear corrX86SIMDParallelQPSK corrNeonSIMDParallelQPSK corrGPUParallelQPSK;
