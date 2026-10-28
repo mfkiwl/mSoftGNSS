@@ -1,12 +1,9 @@
 function correValues = corrMatlabParallelE1(settings, rawSignal, E1CodeTable, ...
     remCarrPhase, carrPhaseStep, remCodePhase, codePhaseStep, ...
     startIdx, chSampSize, isDataRead)
-%CORRMATLABPARALLELL1C MATLAB implementation of the channel-parallel L1C/QPSK tracking correlator.
-%   This function keeps the same calling interface as the SIMD / GPU
-%   correlators so it can be used directly in trkChannelsParallel.m when
-%   settings.correlatorType == 0.
+%Correlate all active Galileo E1B/E1C channels with a shared IF buffer.
 %
-%   Input/output layout follows the MEX correlators:
+%   Output layout:
 %       correValues = [I_E; Q_E; I_P; Q_P; I_L; Q_L;
 %                      pilot_I_E; pilot_Q_E; pilot_I_P;
 %                      pilot_Q_P; pilot_I_L; pilot_Q_L]
@@ -24,13 +21,13 @@ elseif (settings.fileType == 2) && (isDataRead || isempty(rawSignalI) || isempty
     rawSignalQ = rawSignal(2:2:end)';
 end
 
-% Number of active tracking channels in this millisecond.
+% Number of active tracking channels in this integration epoch.
 channelCnt = numel(startIdx);
 
-% Output order per channel: [IE QE IP QP IL QL]^T.
+% Six data and six pilot correlation values per channel.
 correValues = zeros(12, channelCnt);
 
-% Define early-late offset (in chips).
+% Early-late offset on the 12-point-per-primary-chip local-code grid.
 earlyLateSpc = settings.dllCorrelatorSpacing;
 
 for channelNr = 1:channelCnt
@@ -40,8 +37,8 @@ for channelNr = 1:channelCnt
     blksize = chSampSize(channelNr);
     codeStartIdx = startIdx(channelNr);
 
-    % Get a vector with the local code for the current channel. The table
-    % already contains the guard chips required by ceil(tcode) + 1.
+    % Each data/pilot branch contains 12 periodic guard points at each end.
+    % remCodePhase includes the corresponding 11-point index offset.
     E1Code = E1CodeTable(channelNr, :);
     codeLen = length(E1Code)/2;
     E1BCodeD = E1Code(1:codeLen);
@@ -90,7 +87,7 @@ for channelNr = 1:channelCnt
     carrCos = cos(trigarg);
     carrSin = sin(trigarg);
 
-    %% Do correlation to generate the six standard accumulated values -----
+    %% Accumulate Early/Prompt/Late I/Q values for each code branch --------
     % First mix to baseband
     if settings.fileType == 1
         iBasebandSignal = rawSignalBlock .* carrCos;

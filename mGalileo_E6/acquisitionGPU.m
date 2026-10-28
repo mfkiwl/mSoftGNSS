@@ -186,7 +186,7 @@ for PRN = settings.acqSatelliteList
         E6bCode = gpuArray(single(generateE6Bcode(PRN)));
         E6cCode = gpuArray(single(generateE6Ccode(PRN,1)));
         
-        % E5a codes sample index
+        % E6 primary-code sampling indices
         codeValueIndex = gpuArray(single(floor((ts * ...
             (0 : 200*samplesPerCode -1)) / (1/settings.codeFreqBasis))));
         

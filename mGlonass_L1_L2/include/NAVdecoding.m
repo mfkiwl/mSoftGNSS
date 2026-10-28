@@ -1,27 +1,18 @@
 function [eph, firstSubFrame,TOD] = NAVdecoding(I_P_InputBits)
 
-% findPreambles finds the first preamble occurrence in the bit stream of
-% each channel. The preamble is verified by check of the spacing between
-% preambles (6sec) and parity checking of the first two words in a
-% subframe. At the same time function returns list of channels, that are in
-% tracking state and with valid preambles in the nav data stream.
+%NAVDECODING Find GLONASS FDMA time marks and decode navigation data.
+%Time marks are checked at 2 s intervals. Bi-binary and relative coding
+%are removed, and the first 85-bit string is checked with the Hamming code.
 %
-%[eph, firstSubFrame,TOD] = CNAVdecoding(I_P_InputBits)
+%[eph, firstSubFrame,TOD] = NAVdecoding(I_P_InputBits)
 %
 %   Inputs:
-%       I_P_InputBits   - output from the tracking function
-%
+%       I_P_InputBits   - prompt I output, one value per 1 ms code period.
 %   Outputs:
-%       firstSubframe   - Starting positions of the first message in the 
-%                       input bit stream I_P_InputBits in each channel. 
-%                       The position is CNAV bit(20ms before convolutional decoding) 
-%                       count since start of tracking. Corresponding value will
-%                       be set to inf if no valid preambles were detected in
-%                       the channel.
-%       TOD             - Time Of Week (TOW) of the first message(in seconds).
-%                       Corresponding value will be set to inf if no valid preambles
-%                       were detected in the channel.
-%       eph             - SV ephemeris. 
+%       firstSubFrame   - index of the first navigation bit after the time
+%                       mark, in the 1 ms tracking stream; inf on failure.
+%       TOD             - GLONASS time of day, in seconds.
+%       eph             - decoded satellite ephemeris. 
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  
@@ -99,23 +90,14 @@ index = find(...
 %% Analyze detected preamble-like patterns ================================
 for i = 1:numel(index) % For each occurrence
     
-    %--- Find distances in time between this occurrence and the rest of
-    %preambles like patterns. If the distance is 6000 milliseconds (one
-    %subframe), the do further verifications by validating the parities
-    %of two GPS words
+    % Verify the 2 s interval between consecutive time marks.
     
     index2 = index - index(i);
     
     if (~isempty(find(index2 == 2000, 1)))
         
-        %=== Re-read bit values for preamble verification =============
-        % Preamble occurrence is verified by checking the parity of
-        % the first two words in the subframe. Now it is assumed that
-        % bit boundaries are known. Therefore the bit values over 10ms
-        % are combined to increase receiver performance for noisy
-        % signals.In total 85 bits must be read: 77 navigation bits and
-        % 8 Hamming code bits. The index is pointing at the start of
-        % the first navigation bit.
+        % Read the 1.7 s data part: 170 bi-binary symbols at 10 ms each.
+        % Removing bi-binary coding yields an 85-bit navigation string.
         biBinaryBits = I_P_InputBits(index(i): ...
             index(i) + 1700 -1)';
         
@@ -140,7 +122,7 @@ for i = 1:numel(index) % For each occurrence
         %--- Reverse to correct bit order -----------------------------
         bits = revBits((85):-1:1);
         
-        %--- Check the parity of the TLM and HOW words ----------------
+        %--- Check the 85-bit string using its Hamming code -----------
         if (dataVerification(bits) ~= 0)
             % Verification OK. Record the TM start position. Skip
             % the rest of the TM pattern checking for this channel

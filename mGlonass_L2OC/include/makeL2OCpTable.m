@@ -2,8 +2,7 @@ function L2OcpCodesTable = makeL2OCpTable(settings,PRN)
 %Function generates L2OCp primary codes for specified satellites based on the settings
 %provided in the structure "settings". The codes are digitized at the
 %sampling frequency specified in the settings structure.
-%One row in the "L2OcpCodesTable" is one L2OCp primary code. The row number is the PRN
-%number of the L2OCp code.
+%The output contains one sampled code period for the specified PRN.
 %
 %L2OcpCodesTable = makeL2OCpTable(settings,PRN)
 %
@@ -11,8 +10,7 @@ function L2OcpCodesTable = makeL2OCpTable(settings,PRN)
 %       settings          - receiver settings
 %       PRN               - PRN number of the sequence.
 %   Outputs:
-%       L2OcpCodesTable   - an array of arrays (matrix) containing L2OCp codes
-%                       for the specified PRN
+%       L2OcpCodesTable   - sampled code period for the specified PRN.
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  

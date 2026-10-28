@@ -60,7 +60,7 @@ caCode = [caCode(end) caCode caCode(1)];
 codeValueIndex = ceil((ts * (0:samplesPerCode-1)) / tc) + 1;
 
 %--- Correct the last index (due to number rounding issues) -----------
-codeValueIndex(end) = 1023;
+codeValueIndex(end) = settings.codeLength + 1; % Include the leading guard point.
 
 %--- Make the digitized version of the C/A code -----------------------
 % The "upsampled" code is made by selecting values from the CA code

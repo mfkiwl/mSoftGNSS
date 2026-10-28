@@ -186,7 +186,7 @@ for PRN = settings.acqSatelliteList
         E5bICode = gpuArray(single(generateE5bIcode(PRN,1)));
         E5bQCode = gpuArray(single(generateE5bQcode(PRN,1)));
         
-        % E5a codes sample index
+        % E5b primary-code sampling indices
         codeValueIndex = gpuArray(single(floor((ts * ...
             (0 : 200*samplesPerCode -1)) / (1/settings.codeFreqBasis))));
         

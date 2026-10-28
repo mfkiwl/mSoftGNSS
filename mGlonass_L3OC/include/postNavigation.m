@@ -42,13 +42,9 @@ function [navSolutions, eph] = postNavigation(trackResults, settings)
 
 
 %% Check is there enough data to obtain any navigation solution ===========
-% It is necessary to have at least three strings (number 1, 2 and 3) to
-% find satellite coordinates. Then receiver position can be found too.
-% The function requires all 15 strings, because the tracking starts at
-% arbitrary point. Therefore the first received strings can be any three
-% from the 5. One string length is 2 seconds, therefore we need at least
-% 30 sec long record (15 * 2 = 30 sec = 30000ms). We add extra seconds
-% for the cases, when tracking has started in a middle of a string.
+% L3OC positioning requires CRC-valid string types 10, 11 and 12.
+% Each string spans 3 s. This function requires at least 32 s of tracking
+% data before attempting navigation-message decoding.
 
 if (settings.msToProcess < 32000)
     % Show the error message and exit
@@ -59,11 +55,8 @@ if (settings.msToProcess < 32000)
 end
 
 %% Pre-allocate space =======================================================
-% Starting positions of the first message in the input bit stream 
-% trackResults.I_P in each channel. The position is CNAV bit(20ms before
-% convolutional decoding) count since start of tracking. Corresponding
-% value will be set to inf if no valid preambles were detected in the 
-% channel.
+% First valid string index in each channel's 1 ms prompt tracking stream.
+% The value remains inf if no valid string is found.
 subFrameStart  = inf(1, settings.numberOfChannels);
 
 % Time Of Day (TOD) of the first message(in seconds). Corresponding value

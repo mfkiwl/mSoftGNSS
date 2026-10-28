@@ -40,8 +40,8 @@ function settings = initSettings()
 % $Id: initSettings.m,v 1.9.2.31 2006/08/18 11:41:57 dpl Exp $
 
 %% Processing settings ==============================================
-% Number of milliseconds to be processed used 58000 + any transients (see
-% below - in Nav parameters) to ensure nav subframes are provided
+% Navigation decoding requires at least 60000 ms to cover four complete
+% 12 s CNAV message slots after an arbitrary recording start.
 settings.msToProcess        = 58000;        %[ms]
 % Number of channels to be used for signal processing
 settings.numberOfChannels   = 10;
@@ -58,8 +58,8 @@ settings.fileName           = "../IF_Data_Set/GPS_L2.bin";
 % Data type used to store one sample
 settings.dataType           = 'int16';
 % File Types
-%1 - 8 bit real samples S0,S1,S2,...
-%2 - 8 bit I/Q samples I0,Q0,I1,Q1,I2,Q2,...                      
+%1 - real samples S0,S1,S2,...
+%2 - interleaved I/Q samples I0,Q0,I1,Q1,I2,Q2,...
 settings.fileType           = 2;
 % Intermediate, sampling
 settings.IF                 = 0e6;   % [Hz]

@@ -6,14 +6,12 @@
  * Authors: Yafeng Li (School of Automation, Beijing Information Science and Technology University)
  * Time: Aug, 1, 2026
  *
- * The core processing stages are intentionally kept aligned with the
- * channel-parallel SIMD correlator:
+ * Processing stages:
  *   1) mixCarrReal() / mixCarrComplex()
  *   2) localCodeGen()
  *   3) correlator()
  *
- * The difference is only in the MEX gateway framework: this file processes
- * one channel / one code period per call, matching trkChannelsSerial.m.
+ * Each call processes one code period for one channel.
  *==============================================================================*/
 
 #include "mex.h"
@@ -92,7 +90,7 @@ static Settings settings;
 /* The gateway function --------------------------------------------------------
  * Args   : prhs[0] settings      I   receiver settings structure
  *          prhs[1] rawSignal     I   one code-period IF block for one channel
- *          prhs[2] caCode        I   one PRN code vector [lastChip code firstChip]
+ *          prhs[2] caCode        I   one PRN code vector with leading and trailing guards
  *          prhs[3] remCarrPhase  I   residual carrier phase (rad)
  *          prhs[4] carrPhaseStep I   carrier phase step (rad/sample)
  *          prhs[5] remCodePhase  I   residual code phase (chips)
@@ -107,14 +105,10 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 	double* corrValues;
 
 	/* --------------------- One-time persistent buffer allocation ---------------------
-	   Keep this framework close to corrX86SIMDParallelBPSK.cpp: allocate once on the first call
-	   and reuse the same aligned buffers on later code periods. The serial wrapper
-	   intentionally avoids per-call allocation and also avoids dynamic reallocation. */
+	   Allocate aligned buffers on the first call and reuse them for later epochs. */
 	if (!initialized) {
 		/* ----------------- Validate and cache the serial settings once -----------------
-		   This serial wrapper assumes the MATLAB-side settings stay unchanged after the
-		   first call. If settings or input types change later, clear the MEX file and
-		   reinitialize so the cached framework state matches the new configuration. */
+		   Cached settings and input types remain fixed until the MEX file is cleared. */
 		// gateway check
 		checkInputs(nlhs, nrhs, prhs);
 		// Basic setting 
@@ -163,8 +157,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 	size_t blksize = mxGetNumberOfElements(prhs[1]);
 	if (settings.fileType == 2) {
 		blksize = blksize / 2;
-		/* Split the interleaved serial rawSignal block into separate I/Q buffers so the
-		   complex SIMD mixer can reuse the exact same implementation as corrX86SIMDParallelBPSK.cpp. */
+		/* Split interleaved IF samples into separate I/Q buffers for carrier wipeoff. */
 		for (size_t k = 0; k < blksize; ++k) {
 			rawSignalI[k] = rawSignal[2 * k];
 			rawSignalQ[k] = rawSignal[2 * k + 1];
@@ -172,9 +165,8 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 	}
 
 	/* --------------------- Initialize output and run the three-stage core ---------------------
-	   The output layout follows trkChannelsSerial.m directly:
-	     [IE QE IP QP IL QL]
-	   and the processing stages are intentionally unchanged from the shared SIMD core. */
+	   Output layout:
+	     [IE QE IP QP IL QL] */
 	plhs[0] = mxCreateDoubleMatrix(1, 6, mxREAL);
 	corrValues = (double*)mxGetData(plhs[0]);
 
@@ -246,9 +238,8 @@ void mixCarrReal(const short *rawSignal, double carrPhaseStep, double remCarrPha
 		carrPhase_reg1 = _mm256_fmadd_ps(carrPhaseStep_reg, stepNumber_reg, remCarrPhase_reg);
 		carrPhase_reg2 = _mm256_add_ps(carrPhase_reg1, fourPhaseStep);
 		
-		/* Convert phase to LUT indexes. cvtps rounds to nearest integer, which
-		   reduces carrier quantization error compared with truncation. */
-		Index_reg1 = _mm256_cvtps_epi32(carrPhase_reg1);   // using _mm256_cvttps_epi32 will result in larger error    
+		/* Convert phase to LUT indexes using the current SIMD rounding mode. */
+		Index_reg1 = _mm256_cvtps_epi32(carrPhase_reg1);
 		Index_reg1 = _mm256_and_si256(Index_reg1, mask4);   
 		Index_reg2 = _mm256_cvtps_epi32(carrPhase_reg2); 
 		Index_reg2 = _mm256_and_si256(Index_reg2, mask4);
@@ -300,8 +291,7 @@ void mixCarrReal(const short *rawSignal, double carrPhaseStep, double remCarrPha
 	}	
 
 	/* ----------------- For sampling points outside the SIMD iteration  ----------------- */
-	/* Convert the SIMD-loop progress back into the scalar phase accumulator so the
-	   tail loop continues from exactly the same quantized carrier state. */
+	/* Advance the scalar phase accumulator past the SIMD-processed samples. */
 	remCarrPhase = (blksize / 16) * 16 * phaseStep + remCarrPhase;
 	
     for (; IFData < rawSignal + blksize; ++IFData, ++iBasebandSignal, ++qBasebandSignal) {
@@ -309,9 +299,9 @@ void mixCarrReal(const short *rawSignal, double carrPhaseStep, double remCarrPha
         if (settings.rShiftBits != 0) {
             sample = (short)(sample >> settings.rShiftBits);
         }
-		/* Scalar fallback uses the same LUT and scaling as the SIMD path, so the
-		   last 0..15 samples remain bit-consistent with the vectorized section. */
-		int n = ((int)remCarrPhase) % 16;
+		/* Process the remaining 0..15 samples using the carrier LUT and integer scale. */
+		/* Wrap the truncated phase to 0..15, including negative phases. */
+		int n = ((int)remCarrPhase) & 0x0F;
         iBasebandSignal[0] = (short)(cost[n] * sample);
         qBasebandSignal[0] = (short)(sint[n] * sample);
         remCarrPhase += phaseStep;
@@ -377,7 +367,7 @@ void mixCarrComplex(const short* rawSignalI, const short* rawSignalQ, double car
 		carrPhase_reg2 = _mm256_add_ps(carrPhase_reg1, fourPhaseStep);
 
 		/* Convert those phases into 0..15 LUT indexes. */
-		Index_reg1 = _mm256_cvtps_epi32(carrPhase_reg1);   // using _mm256_cvttps_epi32 will result in larger error    
+		Index_reg1 = _mm256_cvtps_epi32(carrPhase_reg1);
 		Index_reg1 = _mm256_and_si256(Index_reg1, mask4);
 		Index_reg2 = _mm256_cvtps_epi32(carrPhase_reg2);
 		Index_reg2 = _mm256_and_si256(Index_reg2, mask4);
@@ -446,7 +436,8 @@ void mixCarrComplex(const short* rawSignalI, const short* rawSignalQ, double car
 		/* Scalar fallback uses the same complex multiply as the SIMD path:
 		     Ibb =  I*cos + Q*sin
 		     Qbb =  Q*cos - I*sin */
-		int n = ((int)remCarrPhase) % 16;
+		/* Wrap the truncated phase to 0..15, including negative phases. */
+		int n = ((int)remCarrPhase) & 0x0F;
         iBasebandSignal[0] = (short)(cost[n] * sampleI + sint[n] * sampleQ);
         qBasebandSignal[0] = (short)(cost[n] * sampleQ - sint[n] * sampleI);
 		remCarrPhase += phaseStep;
@@ -467,22 +458,20 @@ void mixCarrComplex(const short* rawSignalI, const short* rawSignalQ, double car
 void localCodeGen(const int *caCode, mwSize codeLen, double remCodePhase, double codePhaseStep,
 	              double earlyLateSpc, mwSize blksize, short **localCode)
 {
-	/* Initial code phase of early code: 1.0 is due to the first code
-	chip added to caCode for early replica generation */
+	/* Early-code phase in table points. The +1 accounts for one leading
+	   guard point; callers with wider guards include the extra offset. */
 	remCodePhase = remCodePhase - earlyLateSpc + 1.0;
 	if (remCodePhase >= codeLen)
 		remCodePhase -= floor(remCodePhase / codeLen)*codeLen;
 	
-	/* caCode is laid out as [lastChip, code(1..1023), firstChip]. Shifting the
-	   starting phase by -earlyLateSpc + 1.0 means the early replica can safely
-	   address one chip before the nominal prompt position, and the late replica
-	   can safely walk one chip beyond the end without needing modulo per sample. */
+	/* caCode contains one code period with leading and trailing guard points.
+	   The caller supplies the guard-phase offset and enough guard points for
+	   all E/P/L indexes; no per-sample wrapping is performed here. */
 	short *eCode = localCode[0], *pCode = localCode[1], * lCode = localCode[2];
 
 	__m256i Index_reg1, Index_reg2, EPL_reg;
 	__m256 codePhase_reg1, codePhase_reg2;
-	/* Here the natural 0..7 order is fine because code indexes are gathered as
-	   two 8-lane AVX2 vectors and packed back to 16 x int16 code chips. */
+	/* Gather two groups of eight chronological indexes, then pack to int16. */
 	__m256 stepNumber_reg = _mm256_setr_ps(0.0f, 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f);
 	const __m256 remCodePhase_reg = _mm256_set1_ps((float)remCodePhase);
 	const __m256 codePhaseStep_reg = _mm256_set1_ps((float)codePhaseStep);
@@ -493,20 +482,19 @@ void localCodeGen(const int *caCode, mwSize codeLen, double remCodePhase, double
 	for ( ; eCode <= localCode[0] + blksize - 16; eCode += 16, pCode += 16, lCode += 16)
 	{
 		/* ----------------------- Early code generation ----------------------- */
-		/* Generate the code phase of 16 successive samples. Because the phase is
-		   always non-negative in this routine, truncation toward zero is equivalent
-		   to floor(), matching the MATLAB integer indexing behavior. */
+		/* Generate phases for 16 samples and truncate them toward zero to form
+		   integer indexes. For nonnegative phases, truncation equals floor(). */
 		codePhase_reg1 = _mm256_fmadd_ps(codePhaseStep_reg, stepNumber_reg, remCodePhase_reg);
 		codePhase_reg2 = _mm256_add_ps(codePhase_reg1, eightCodePhase);
 		Index_reg1 = _mm256_cvttps_epi32(codePhase_reg1);
 		Index_reg2 = _mm256_cvttps_epi32(codePhase_reg2);
 		/* Gather 16 local-code chips directly from the int32 code table,
-		   then pack them back to int16 so correlator() can keep using madd_epi16. */
+		   then pack them to int16 for madd_epi16 correlation. */
 		EPL_reg = gatherCode16(caCode, Index_reg1, Index_reg2);
 		_mm256_store_si256((__m256i*)eCode, EPL_reg);
 
 		/* ----------------------- Prompt code generation ----------------------- */
-		/* Prompt is just Early shifted by +earlyLateSpc chips. */
+		/* Prompt is Early shifted by +earlyLateSpc code-table points. */
 		codePhase_reg1 = _mm256_add_ps(codePhase_reg1,earlyLateSpc_reg);
 		codePhase_reg2 = _mm256_add_ps(codePhase_reg2, earlyLateSpc_reg);
 		Index_reg1 = _mm256_cvttps_epi32(codePhase_reg1);
@@ -606,7 +594,7 @@ void correlator(short *iBasebandSignal, short *qBasebandSignal, short **localCod
 
 	/* --------------- Integration for SIMD register elements ---------------
  * The SIMD partial sums are first stored to scalar arrays and then reduced
- * to 64-bit accumulators to reduce the risk of overflow in long integrations.
+ * to 64-bit accumulators.
  *---------------------------------------------------------------------- */
 	_mm256_storeu_si256((__m256i*)I_E_sum, I_E_reg);
 	_mm256_storeu_si256((__m256i*)Q_E_sum, Q_E_reg);
@@ -673,7 +661,7 @@ static void* checkedAlignedMalloc(size_t nbytes, const char* name)
 
 /* gatherCode16 ----------------------------------------------------------------
  * Gather 16 local-code chips from the int32 code table and repack them
- * into one AVX register of 16 x int16 samples for the existing correlator path.
+ * into one AVX register of 16 x int16 samples for correlation.
  * Args   : const int* caCode         I   int32 code table for one PRN
  *          __m256i Index_reg1        I   code indexes for samples 0..7
  *          __m256i Index_reg2        I   code indexes for samples 8..15
@@ -739,8 +727,7 @@ static Settings parseSettings(const mxArray* s)
 
 	cfg.trkMode = getStructIntField(s, "trkMode");
 	cfg.fileType = getStructIntField(s, "fileType");
-	/* dllCorrelatorSpacing is fractional for GPS L1 C/A (default 0.5 chip),
-	   so reading it as int collapses Early/Prompt/Late into the same code. */
+	/* Read fractional Early/Late spacing without integer truncation. */
 	cfg.earlyLateSpc = getStructDoubleField(s, "dllCorrelatorSpacing");
 	cfg.correlatorType = getStructIntField(s, "correlatorType");
 	if (cfg.correlatorType == 1) // SIMD correlator

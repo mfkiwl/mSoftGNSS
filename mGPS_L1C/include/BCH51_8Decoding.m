@@ -1,18 +1,17 @@
 function [flag, decodedBits]= BCH51_8Decoding(checkBits)
 
-% This function decodes the BCH(51,8) data symbols of the first subframe of
-% in the CNAV-2 message. A total of 2^8-1 hypotheses are repeated to find
-% the 8 original symbols.
+% This function decodes the 52-symbol first subframe of CNAV-2 using
+% 2^8 BCH(51,8) hypotheses. The best hypothesis and its polarity recover
+% the 9-bit Time of Interval (TOI).
 %
-% [flag,outputBits] = BCH51_8Decoding(bits)
+% [flag,decodedBits] = BCH51_8Decoding(checkBits)
 %
 %   Inputs:
-%       bits         - Input row vector of message symbols to be decoded
-%                      with 51 bits in bipolar (-1, +1)
+%       checkBits    - Row vector of 52 message symbols in bipolar (-1, +1).
 %   Outputs:
 %       flag         - Indicator for  decoding of the BCH(51,8) data 
 %                      symbols, 1:success, 0: fail.
-%       decodedBits  - Decoded message symbols for the BCH(51,8)
+%       decodedBits  - Nine decoded TOI bits, or [] if decoding fails.
 
 %--------------------------------------------------------------------------
 %                           SoftGNSS v3.0
@@ -38,10 +37,7 @@ function [flag, decodedBits]= BCH51_8Decoding(checkBits)
 %CVS record:
 %$Id: BCH51_8Decoding.m,v 1.1.2.5 2018/07/24 22:00:00 dpl Exp $
 
-% --- Parameters ---
-% Threshold can be adjusted based on noise level. 
-% Max correlation is 52. 
-% A threshold of 40 allows for approx 6 bit errors.
+% A correlation threshold of 40 permits up to six errors in 52 symbols.
 threshold = 40; 
 
 % Ensure input is a row vector
@@ -57,53 +53,39 @@ numHypotheses = 2^8;
 hypoBits8 = zeros(numHypotheses, 8);
 correValue = zeros(1, numHypotheses);
 
-%% 1. Generate Hypotheses for 8 LSBs (Loop over all 256 possibilities)
+%% Generate BCH hypotheses for the eight least-significant TOI bits =======
 % Reference: IS-GPS-800J Figure 3.2-4 / Text Section 3.2.3.2
 
 
 for i = 0 : numHypotheses - 1
     idx = i + 1;
     
-    % Get 8 bits for current hypothesis (b8...b1)
-    % Using bitget to extract bits. b8 is MSB of this 8-bit chunk.
-    % bitget(i, 8) is b8, bitget(i, 1) is b1.
-    % The register is loaded with b8...b1.
+    % Candidate TOI bits in order b8,...,b1.
     current8Bits = bitget(i, 8:-1:1); 
     hypoBits8(idx, :) = current8Bits;
     
-    % --- Simulate LFSR (BCH 51,8 Generator) ---
-    % Initial State: Loaded with the 8 data bits
-    % Stage 1 (Left) ... Stage 8 (Right)
-    % Diagram shows shift direction Left -> Right.
-    % Register mapping: reg(1) corresponds to left-most, reg(8) to right-most.
+    % Load b1,...,b8 into the BCH shift register.
     reg = fliplr(current8Bits); 
     
     generatedSeq = zeros(1, 51);
     
     for k = 1:51
-        % Per image_8c9b55.jpg: "The last stage (8th) is selected as encoding output"
+        % The last register stage (8th) supplies the encoded output.
         outBit = reg(8);
         generatedSeq(k) = outBit;
         
-        % Feedback Calculation (Polynomial 763 octal / 1+x+x^4+x^5+x^6+x^7+x^8)
-        % Taps are at outputs of stages: 1, 4, 5, 6, 7, 8.
-        % These are XORed (sum modulo 2) and fed back to Input (Stage 1).
+        % Feedback taps for 1+x+x^4+x^5+x^6+x^7+x^8 (763 octal).
         feedback = xor(reg(1), reg(4));
         feedback = xor(feedback, reg(5));
         feedback = xor(feedback, reg(6));
         feedback = xor(feedback, reg(7));
         feedback = xor(feedback, reg(8));
         
-        % Shift Register: New bit enters at 1, others shift right
+        % Shift toward stage 8 and insert feedback at stage 1.
         reg = [feedback, reg(1:7)];
     end
     
-    % --- Construct the Full 52-bit Hypothesis (Assuming b9 = 0) ---
-    % Reference: image_8c9b55.jpg step (3) and (4)
-    % The 9th bit (b9) is MSB of TOI.
-    % Construction: [b9, (generatedSeq XOR b9)]
-    % We assume b9 = 0 for the base hypothesis.
-    % If b9 = 0: Sequence is [0, generatedSeq]
+    % Form [b9, BCH xor b9] with b9=0; correlation polarity determines b9.
     
     hypoSequenceBin = [0, generatedSeq];
     
@@ -112,13 +94,11 @@ for i = 0 : numHypotheses - 1
     hypoSyms(hypoSequenceBin == 0) = 1;
     hypoSyms(hypoSequenceBin == 1) = -1;
     
-    % --- Correlation ---
-    % Correlate received signal with the b9=0 hypothesis
+    % Correlate the received symbols with the b9=0 hypothesis.
     correValue(idx) = sum(hypoSyms .* checkBits);
 end
 
-%% 2. Decision Logic (Reference: image_8c9b39.jpg)
-% "Find the maximum absolute value among the 256 correlation values."
+%% Select the hypothesis and recover the TOI most-significant bit =========
 [maxAbsVal, pos] = max(abs(correValue));
 
 % Retrieve the raw correlation value (signed) to determine b9
@@ -131,9 +111,7 @@ if maxAbsVal >= threshold
     % Extract the 8 LSBs corresponding to the best match
     best8Bits = hypoBits8(pos, :);
     
-    % Determine the 9th bit (MSB / b9)
-    % If max correlation is Positive: b9 was 0 (matches our hypothesis)
-    % If max correlation is Negative: b9 was 1 (input was inverted)
+    % Positive correlation indicates b9=0; negative correlation indicates b9=1.
     if rawCorr > 0
         b9 = 0;
     else

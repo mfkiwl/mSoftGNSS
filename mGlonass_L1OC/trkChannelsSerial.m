@@ -3,11 +3,8 @@ function [trackResults, channel]= trkChannelsSerial(fid, channel, settings)
 %
 %[trackResults, channel] = trkChannelsSerial(fid, channel, settings)
 %
-% This implementation processes one channel at a time. For every active
-% PRN it reads one integration interval from the IF file, calls the selected
-% correlator backend, and updates the carrier PLL and code DLL before
-% moving to the next interval. The serial form is useful as the reference
-% implementation for the SIMD/GPU accelerated correlators.
+% Process each PRN over the full tracking interval before the next PRN.
+% Each integration updates the channel's DLL and PLL.
 %
 %   Inputs:
 %       fid             - File identifier of the IF signal record.
@@ -54,7 +51,7 @@ function [trackResults, channel]= trkChannelsSerial(fid, channel, settings)
 %$Id: tracking.m,v 1.14.2.31 2006/08/14 11:38:22 dpl Exp $
 
 %% Initialize result structure ============================================
-% Default channel status. It is replaced after successful tracking.
+% Default channel status before processing.
 trackResults.status         = '-';      % No tracked signal, or lost lock
 % Number of coherent integrations to process.
 NumToProcess =  round(settings.msToProcess/1000/settings.intTime);
@@ -115,9 +112,7 @@ PDIcode = settings.intTime;
 %--- PLL variables --------------------------------------------------------
 % Coherent integration time used by the carrier loop filter.
 PDIcarr = settings.intTime;
-% Calculate second-order PLL filter coefficients. For L1OC the loop is
-% updated every 2 ms, so use unit loop gain; the 1 ms QPSK receivers'
-% k = 0.25 setting makes the discrete carrier loop unstable here.
+% Calculate second-order PLL filter coefficients with unit loop gain.
 [tau1carr, tau2carr] = calcLoopCoef(settings.pllNoiseBandwidth, ...
     settings.pllDampingRatio, 1.0);
 % -------- Number of acquired signals --------------------------------------
@@ -191,9 +186,7 @@ for channelNr = 1:settings.numberOfChannels
         % Generate the L1OCd code sampled at one value per equivalent chip.
         fineFactor = settings.L1OCFineFactor;          % = 2
         L1OCdCode = generateL1OCdCode(channel(channelNr).PRN,settings);
-        % Repeat L1OCd to the same length as L1OCp. This keeps the L1OC data and
-        % pilot code tables compatible with the common QPSK MEX interface,
-        % so the same correlator code can process both branches.
+        % Repeat the data code to the 8 ms pilot-code period.
         L1OCdCodeFine = repelem(L1OCdCode,fineFactor);
         L1OCdCodeFine = repmat(L1OCdCodeFine, 1, 4); 
         % Add one chip of wraparound on both sides for early/late indexing.
@@ -201,21 +194,19 @@ for channelNr = 1:settings.numberOfChannels
 
         % L1OCp code phase corresponding to the acquired L1OCd code phase.
         L1OCpCodePhase = channel(channelNr).L1OCpCodePhase;
-        % Generate the CL pilot code sampled at one value per equivalent chip.
+        % Generate the L1OCp pilot code on the fine TDM/BOC grid.
         L1OCpCode = generateL1OCpBOCCode(channel(channelNr).PRN,settings);
         % Add one chip of wraparound on both sides for early/late indexing.
         L1OCpCode = [L1OCpCode(end) L1OCpCode L1OCpCode(1)]; %#ok<AGROW>
 
-        % Place equal-length CM and CL tables contiguously. The correlator
-        % selects the data or pilot half using the L1OC code phase passed
-        % below, matching the shared QPSK MEX input layout.
+        % Concatenate equal-length L1OCd and L1OCp branches.
         L1OCCodeTable = [L1OCdCodeFine L1OCpCode];
         if settings.correlatorType == 1
             % SIMD serial correlator expects an int32 local code table.
             L1OCCodeTable = int32(L1OCCodeTable);
         elseif settings.correlatorType == 2
-            % GPU serial correlator expects an int8 local code table.
-            L1OCCodeTable = int8(L1OCCodeTable);
+            % GPU serial correlator expects a single local code table.
+            L1OCCodeTable = single(L1OCCodeTable);
         end
 
         %--- Perform various initializations ------------------------------
@@ -292,8 +283,7 @@ for channelNr = 1:settings.numberOfChannels
             % Carrier phase step in rad/sample based on the current
             % carrier NCO and the sampling frequency.
             carrPhaseStep = carrFreq * 2.0 * pi / settings.samplingFreq;
-            % Convert the residual phase within the current CM interval into
-            % an absolute phase within the 75-period CL sequence.
+            % Convert the residual data-code phase to the 8 ms pilot-code phase.
             remCodePhaseL1OC = remCodePhase + codeLength *(L1OCpCodePhase-1);
             settingsCorr = settings;
             settingsCorr.codeLength         = settings.codeLength * fineFactor;
@@ -374,7 +364,7 @@ for channelNr = 1:settings.numberOfChannels
                 codeError = (codeError + codeErrorL1OCp)/2;
             end
 
-            % Advance the CL period index and wrap after the 75th L1OCd period.
+            % Advance the pilot-period index and wrap after four L1OCd periods.
             L1OCpCodePhase = L1OCpCodePhase + 1;
             if (L1OCpCodePhase >= 5)
                 L1OCpCodePhase = 1;

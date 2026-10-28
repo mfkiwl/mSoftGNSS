@@ -1,4 +1,14 @@
 function E6C = generateE6Ccode(PRN,flag)
+%Generate the Galileo E6C primary or tiered code in bipolar form (-1,+1).
+%
+%E6C = generateE6Ccode(PRN,flag)
+%
+%   Inputs:
+%       PRN  - satellite PRN number, 1 to 50.
+%       flag - 1: primary code; 2: primary code modulated by the secondary code.
+%   Outputs:
+%       E6C  - row vector of 5115 primary chips or 511500 tiered-code chips.
+%
 E6C_code=[...
 % E6-C Code No 01
 'F5A3D656F9DAC534C05240934AEDC5F175B4D4873FA63FDBB4DC03D20321BE8E78FD' , ...

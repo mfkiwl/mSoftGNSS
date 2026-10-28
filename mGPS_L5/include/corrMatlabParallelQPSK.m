@@ -90,7 +90,7 @@ for channelNr = 1:channelCnt
     carrCos = cos(trigarg);
     carrSin = sin(trigarg);
 
-    %% Do correlation to generate the six standard accumulated values -----
+    %% Accumulate E/P/L I/Q correlations for each signal branch ------------
     % First mix to baseband
     if settings.fileType == 1
         iBasebandSignal = rawSignalBlock .* carrCos;

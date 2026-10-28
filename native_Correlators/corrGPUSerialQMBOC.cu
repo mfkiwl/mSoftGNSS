@@ -6,13 +6,11 @@
  * Authors: Yafeng Li (School of Automation, Beijing Information Science and Technology University)
  * Time: Apr, 21, 2026
  *
- * The core processing stages are intentionally kept aligned with the
- * GPU channel-parallel correlator:
+ * Processing stages:
  *   1) mixCarrReal() / mixCarrComplex()
  *   2) correlator()
  *
- * The difference is only in the MEX gateway framework: this file processes
- * one channel / one code period per call, matching trkChannelsSerial.m.
+ * Each call processes one code period for one channel.
  *===============================================================================*/
 
 #include "mex.h"
@@ -29,7 +27,7 @@
 /* Settings struct -------------------------------------------------------------
  * trkMode        : 0 - channel-serial tracking; 1 - channel-parallel tracking
  * fileType       : 1 - real samples; 2 - complex samples
- * earlyLateSpc   : half of the early - late code correlation spacing (chips)
+ * earlyLateSpc   : half of the early-late spacing in code-table points
  *------------------------------------------------------------------------------*/
 typedef struct {
     int trkMode;
@@ -63,10 +61,10 @@ struct GPU_Complex
     float i;
     __host__ __device__ GPU_Complex() : r(0.0f), i(0.0f) {}
 
-    // Constructor for a complex number with real amd imag parts of float
+    // Constructor for a complex number with float real and imaginary parts
     __host__ __device__ GPU_Complex(float realPart, float imagPart) : r(realPart), i(imagPart) {}
 
-    // Magnitude of a complex number
+    // Squared magnitude of a complex number
     __host__ __device__ float magnitude2() { return r * r + i * i; }
 
     __device__ GPU_Complex operator*(const GPU_Complex& a) {
@@ -157,8 +155,8 @@ __constant__ float d_initCodePhase[CORR_NUMBER];
  *                                              [B1CData pilotBOC11 pilotBOC61]
  *          prhs[3]   double      remCarrPhase   I   residual carrier phase (rad)
  *          prhs[4]   double      carrPhaseStep  I   carrier phase step (rad/sample)
- *          prhs[5]   double      remCodePhase   I   residual code phase (chips)
- *          prhs[6]   double      codePhaseStep  I   code phase step (chips/sample)
+ *          prhs[5]   double      remCodePhase   I   residual code phase (code-table points)
+ *          prhs[6]   double      codePhaseStep  I   code-table phase increment per IF sample
  *          prhs[7]   double      inPRN          I   PRN number of the current channel
  *          plhs[0]   double*     corrValues     O   [data E/P/L I/Q,
  *                                                 pilotBOC11 E/P/L I/Q,
@@ -182,16 +180,14 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 
     if (!initialized)
     {
-        /* Validate the MEX interface before dereferencing prhs[k]. Keep this
-           check in the first-time initialization path so later calls stay on
-           the existing fast path. */
+        /* Validate inputs before reading the MATLAB arguments on the first call. */
         checkInputs(nrhs, nlhs, prhs);
 
         // Basic setting
         settings = parseSettings(prhs[0]);
 
         /* --------------- Find array dimensions ---------------
-         * codeLen      : total number of chips in the concatenated
+         * codeLen      : total number of code-table points in the concatenated
          *                [B1CData pilotBOC11 pilotBOC61] local code table
          * rawSignalLen : number of int16 entries in the first signal block
          * blksize      : number of complex samples processed by the kernels
@@ -219,13 +215,12 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 
 
         /* The combined QMBOC code table is arranged as:
-             [B1CData(last,1..N,first), pilotBOC11(last,1..N,first),
-              pilotBOC61(last,1..N,first)].
+             [guarded B1CData, guarded pilotBOC11,
+              guarded pilotBOC61].
            Only the small Early/Prompt/Late phase shift is kept here. The data/pilot
            branch offset is added later as an integer index in the CUDA kernel,
            avoiding loss of fractional code-phase precision in float arithmetic.
-           The shifts are used with ceil-style indexing to match the MATLAB
-           reference correlator: index = ceil(codePhase + shift). */
+           Code-table indexes are formed as ceil(codePhase + shift). */
         float initCodePhase[CORR_NUMBER] = {
             (float)(-settings.earlyLateSpc),
             0.0f,
@@ -338,7 +333,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
  */
 __global__ void mixCarrReal(const short* d_pRawSignal, GPU_Complex* d_BasebandSignal, int blksize, float remCarrPhase, float carrPhaseStep)
 {
-    // CUDA version of floating point NCO and vector dot product integrated
+    // Generate the carrier replica and wipe off the carrier.
 
     for (int index = blockIdx.x * blockDim.x + threadIdx.x; index < blksize; index += blockDim.x * gridDim.x) {
         float sin, cos;
@@ -356,7 +351,7 @@ __global__ void mixCarrReal(const short* d_pRawSignal, GPU_Complex* d_BasebandSi
 __global__ void mixCarrComplex(const short* d_pRawSignal, GPU_Complex* d_BasebandSignal,
     int blksize, float remCarrPhase, float carrPhaseStep)
 {
-    // CUDA version of floating point NCO and vector dot product integrated
+    // Generate the carrier replica and wipe off the carrier.
     const short2* d_pRawSignalIQ = reinterpret_cast<const short2*>(d_pRawSignal);
     for (int index = blockIdx.x * blockDim.x + threadIdx.x; index < blksize; index += blockDim.x * gridDim.x) {
         float sin, cos;

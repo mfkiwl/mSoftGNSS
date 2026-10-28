@@ -1,7 +1,7 @@
 function correValues = corrMatlabParallelQPSK(settings, rawSignal, L2CodeTable, ...
     remCarrPhase, carrPhaseStep, remCodePhase, codePhaseStep, ...
     startIdx, chSampSize, isDataRead)
-%CORRMATLABPARALLELQPSK MATLAB channel-parallel GPS L2C tracking correlator.
+%CORRMATLABPARALLELTMBPSK MATLAB channel-parallel GPS L2C tracking correlator.
 %   This function keeps the same calling interface as the SIMD / GPU
 %   correlators so it can be used directly in trkChannelsParallel.m when
 %   settings.correlatorType == 0.

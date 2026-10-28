@@ -10,8 +10,7 @@ function [CNo, PllDetector]= Calc_CNo_PLD(trackResults,settings,loopCnt)
 %       loopCnt           - Iteration index for C/No calculation
 %   Outputs:
 %       CNo               - Estimated C/No for the given values of I and Q
-%                           CNo(1) is for data channel,CNo(21) is for pilot
-%                           channel, and CNo(2) is for the whole L1OC signal  
+%                           CNo(1): data; CNo(2): pilot; CNo(3): combined.
 %       PllDetector       - PLL lock detector output for data and pilot
 %                            channels
 %

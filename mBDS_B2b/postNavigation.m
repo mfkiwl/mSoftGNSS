@@ -42,11 +42,9 @@ function [navSolutions, eph] = postNavigation(trackResults, settings)
 %$Id: postNavigation.m,v 1.1.2.22 2006/08/09 17:20:11 dpl Exp $
 
 %% Check is there enough data to obtain any navigation solution ===========
-% It is necessary to have at least two messages (type 10 and 30) 
-% to find satellite coordinates. Then receiver 
-% position can be found. The function requires at least 8 message.
-% One message length is 1 seconds, therefore we need at least 18 sec long
-% record (2 * 8 = 16 sec = 16000ms).
+% Types 10 and 30 provide the required orbit and clock data. Each B-CNAV3
+% frame spans 1 s. This function requires at least 24 s of tracking data;
+% successful decoding also depends on the message schedule and signal quality.
 if (settings.msToProcess < 24000)
     % Show the error message and exit
     disp('Record is to short. Exiting!');
@@ -81,12 +79,12 @@ for channelNr = activeChnList
         BCNAV3decoding(trackResults(channelNr).I_P,...
         trackResults(channelNr).Q_P,PRN);  
 
-    %--- Exclude satellite if it does not have the necessary cnav data ----
+    %--- Exclude satellites without the required B-CNAV3 data ------------
     if (eph(PRN).idValid(1) ~= 10 || eph(PRN).idValid(2) ~= 30 )
         %--- Exclude channel from the list --------------------------------
         activeChnList = setdiff(activeChnList, channelNr);
         
-        %--- Print CNAV decoding information for current PRN --------------
+        %--- Print B-CNAV3 decoding information for the current PRN --------
         if (eph(PRN).idValid(1) ~= 10)
             fprintf('  Message type 10 for PRN %02d not decoded.\n', PRN);  
         end

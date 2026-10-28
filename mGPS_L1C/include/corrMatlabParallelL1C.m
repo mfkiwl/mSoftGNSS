@@ -1,16 +1,31 @@
 function correValues = corrMatlabParallelL1C(settings, rawSignal, L1CCodeTable, ...
     remCarrPhase, carrPhaseStep, remCodePhase, codePhaseStep, ...
     startIdx, chSampSize, isDataRead)
-%CORRMATLABPARALLELL1C MATLAB implementation of the channel-parallel GPS L1C data/pilot tracking correlator.
-%   This function keeps the same calling interface as the SIMD / GPU
-%   correlators so it can be used directly in trkChannelsParallel.m when
-%   settings.correlatorType == 0.
+%Correlate all active GPS L1C data/pilot channels using MATLAB.
 %
-%   Input/output layout follows the MEX correlators:
-%       correValues = [I_E; Q_E; I_P; Q_P; I_L; Q_L;
-%                      pilot_I_E; pilot_Q_E; pilot_I_P;
-%                      pilot_Q_P; pilot_I_L; pilot_Q_L]
-%   where each column corresponds to one tracking channel.
+%correValues = corrMatlabParallelL1C(settings, rawSignal, L1CCodeTable, ...
+%    remCarrPhase, carrPhaseStep, remCodePhase, codePhaseStep, ...
+%    startIdx, chSampSize, isDataRead)
+%
+%   Inputs:
+%       settings      - Receiver settings; dllCorrelatorSpacing is in
+%                       1/12-primary-chip code-table points.
+%       rawSignal     - Shared buffer of real samples or interleaved I/Q.
+%       L1CCodeTable  - One [data, pilot] row per channel; each branch has
+%                       12 points per primary chip and 12 guards at each end.
+%       remCarrPhase  - Initial carrier phases [rad].
+%       carrPhaseStep - Carrier phase increments [rad/IF sample].
+%       remCodePhase  - Initial phases on the 12-point grid, including the
+%                       caller's +11 guard-point offset.
+%       codePhaseStep - Code phase increments [1/12 primary chip/IF sample].
+%       startIdx      - One-based start index of each channel in the buffer.
+%       chSampSize    - Number of logical IF samples for each channel.
+%       isDataRead    - 1 for a newly read buffer; 0 to reuse cached samples.
+%   Outputs:
+%       correValues   - 12 x channelCnt matrix; rows 1:6 are data
+%                       [I_E Q_E I_P Q_P I_L Q_L], rows 7:12 are pilot.
+%                       Pilot prompt is also used for CNAV-2 frame sync.
+%   startIdx counts logical samples: one real value or one complex I/Q pair.
 
 persistent rawSignalI rawSignalQ rawSignalT
 
@@ -24,13 +39,13 @@ elseif (settings.fileType == 2) && (isDataRead || isempty(rawSignalI) || isempty
     rawSignalQ = rawSignal(2:2:end)';
 end
 
-% Number of active tracking channels in this millisecond.
+% Number of active tracking channels in this integration epoch.
 channelCnt = numel(startIdx);
 
-% Output order per channel: [IE QE IP QP IL QL]^T.
+% Output order per branch: [IE QE IP QP IL QL]^T.
 correValues = zeros(12, channelCnt);
 
-% Define early-late offset (in chips).
+% Define early-late offset on the 12-point-per-primary-chip grid.
 earlyLateSpc = settings.dllCorrelatorSpacing;
 
 for channelNr = 1:channelCnt
@@ -41,13 +56,12 @@ for channelNr = 1:channelCnt
     codeStartIdx = startIdx(channelNr);
 
     % Get a vector with the local code for the current channel. The table
-    % already contains the guard chips required by ceil(tcode) + 1.
+    % contains 12 guard points at each end of each data/pilot branch.
     L1CCode = L1CCodeTable(channelNr, :);
+    % Length of one guarded branch, not the combined data/pilot table.
     codeLen = length(L1CCode)/2;
     L1CCodeD = L1CCode(1:codeLen);
-    if (settings.pilotTRKflag == 1)
-        L1CCodeP = L1CCode(1+codeLen:end);
-    end
+    L1CCodeP = L1CCode(1+codeLen:end);
 
     % Extract the current signal block to be processed by this channel.
     if settings.fileType == 1
@@ -64,33 +78,25 @@ for channelNr = 1:channelCnt
     % Define index into early code vector
     tcode = ceil(codePhase - earlyLateSpc) + 1;
     earlyCodeD = L1CCodeD(tcode);
-    if (settings.pilotTRKflag == 1)
-        earlyCodeP = L1CCodeP(tcode);
-    end
+    earlyCodeP = L1CCodeP(tcode);
 
     % Define index into late code vector
     tcode = ceil(codePhase + earlyLateSpc) + 1;
     lateCodeD = L1CCodeD(tcode);
-    if (settings.pilotTRKflag == 1)
-        lateCodeP = L1CCodeP(tcode);
-    end
+    lateCodeP = L1CCodeP(tcode);
 
     % Define index into prompt code vector
     tcode = ceil(codePhase) + 1;
     promptCodeD = L1CCodeD(tcode);
-    if (settings.pilotTRKflag == 1)
-        promptCodeP = L1CCodeP(tcode);
-    end
+    promptCodeP = L1CCodeP(tcode);
 
     %% Generate the carrier frequency to mix the signal to baseband -------
-    % carrPhaseStep is already the carrier phase step in radians per
-    % sample, so the local carrier phase is formed directly with sample
-    % indices instead of a time vector in seconds.
+    % Local carrier phase in radians.
     trigarg = carrPhaseStep(channelNr) * sampleIndex + remCarrPhase(channelNr);
     carrCos = cos(trigarg);
     carrSin = sin(trigarg);
 
-    %% Do correlation to generate the six standard accumulated values -----
+    %% Generate six accumulated I/Q values per branch ---------------------
     % First mix to baseband
     if settings.fileType == 1
         iBasebandSignal = rawSignalBlock .* carrCos;
@@ -108,17 +114,14 @@ for channelNr = 1:channelCnt
     I_L = sum(lateCodeD   .* iBasebandSignal);
     Q_L = sum(lateCodeD   .* qBasebandSignal);
 
-    % Output order matches the SIMD / GPU correlator interface used by
-    % trkChannelsParallel.m.
+    % Data correlations in E/P/L order.
     correValues(1:6, channelNr) = [I_E; Q_E; I_P; Q_P; I_L; Q_L];
-    if (settings.pilotTRKflag == 1)
-        % Now get early, late, and prompt values for each
-        I_E_P = sum(earlyCodeP  .* iBasebandSignal);
-        Q_E_P = sum(earlyCodeP  .* qBasebandSignal);
-        I_P_P = sum(promptCodeP .* iBasebandSignal);
-        Q_P_P = sum(promptCodeP .* qBasebandSignal);
-        I_L_P = sum(lateCodeP   .* iBasebandSignal);
-        Q_L_P = sum(lateCodeP   .* qBasebandSignal);
-        correValues(7:12, channelNr) = [I_E_P; Q_E_P; I_P_P; Q_P_P; I_L_P; Q_L_P];
-    end
+    % Pilot correlations for tracking and CNAV-2 frame synchronization.
+    I_E_P = sum(earlyCodeP  .* iBasebandSignal);
+    Q_E_P = sum(earlyCodeP  .* qBasebandSignal);
+    I_P_P = sum(promptCodeP .* iBasebandSignal);
+    Q_P_P = sum(promptCodeP .* qBasebandSignal);
+    I_L_P = sum(lateCodeP   .* iBasebandSignal);
+    Q_L_P = sum(lateCodeP   .* qBasebandSignal);
+    correValues(7:12, channelNr) = [I_E_P; Q_E_P; I_P_P; Q_P_P; I_L_P; Q_L_P];
 end

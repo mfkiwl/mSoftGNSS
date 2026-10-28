@@ -1,9 +1,5 @@
 function E6BCodesTable = makeE6BTable(PRN,settings)
-%Function generates E6B primary codes for specified satellites based on the settings
-%provided in the structure "settings". The codes are digitized at the
-%sampling frequency specified in the settings structure.
-%One row in the "E6BCodesTable" is one E6B primary code. The row number is the PRN
-%number of the E6B code.
+%Sample one E6B primary-code period at settings.samplingFreq.
 %
 %E6BCodesTable = makeE6BTable(PRN,settings)
 %
@@ -11,8 +7,7 @@ function E6BCodesTable = makeE6BTable(PRN,settings)
 %       settings          - receiver settings
 %       PRN               - PRN number of the sequence.
 %   Outputs:
-%       E6BCodesTable    - an array of arrays (matrix) containing E6B codes
-%                       for the specified PRN
+%       E6BCodesTable    - row vector of code samples for the specified PRN
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  

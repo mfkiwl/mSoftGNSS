@@ -56,10 +56,10 @@ end
 trigarg = carrPhaseStep .* (0:blksize) + remCarrPhase;
 
 % Finally compute the signal to mix the collected data to
-% bandband
+% baseband
 carrsig = exp(-1i .* trigarg(1:blksize));
 
-%% Do correlation to Generate the six standard accumulated values -----------
+%% Accumulate E/P/L I/Q correlations for each signal branch ----------------
 % First mix to baseband
 iBasebandSignal = real(carrsig .* rawSignal);
 qBasebandSignal = imag(carrsig .* rawSignal);

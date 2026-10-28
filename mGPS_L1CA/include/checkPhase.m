@@ -1,6 +1,6 @@
 function word = checkPhase(word, D30Star)
-%Checks the parity of the supplied 30bit word.
-%The last parity bit of the previous word is used for the calculation.
+%Correct the data-bit polarity of a 30-bit navigation word.
+%The preceding word's D30Star bit determines whether to invert the data.
 %A note on the procedure is supplied by the GPS standard positioning
 %service signal specification.
 %

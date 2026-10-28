@@ -42,10 +42,7 @@ for channelNr = channelList
     
     if trackResults(channelNr).status == 'T'      
         %% Select (or create) and clear the figure ========================
-        % The number 200 is added just for more convenient handling of the open
-        % figure windows, when many figures are closed and reopened.
-        % Figures drawn or opened by the user, will not be "overwritten" by
-        % this function.
+        % Use figure channelNr + 200 for this channel's tracking plots.
         
         figure(channelNr +200);
         clf(channelNr +200);

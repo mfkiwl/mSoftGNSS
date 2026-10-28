@@ -45,7 +45,7 @@ function [trackResults, channel]= trkChannelsSerial(fid, channel, settings)
 %% Initialize result structure ============================================
 
 % Channel status
-trackResults.status         = '-';      % No tracked signal, or lost lock
+trackResults.status         = '-';      % No tracked signal
 
 % The absolute sample in the record of the E6 code start:
 trackResults.absoluteSample = zeros(1, settings.msToProcess);
@@ -108,8 +108,12 @@ PDIcode = settings.intTime;
     settings.dllDampingRatio, 1.0);
 
 %--- PLL variables --------------------------------------------------------
+% Summation interval
+PDIcarr = settings.intTime;
+
 % Calculate filter coefficient values
-[pf3,pf2,pf1] = calcLoopCoefCarr(settings);
+[tau1carr, tau2carr] = calcLoopCoef(settings.pllNoiseBandwidth, ...
+                                    settings.pllDampingRatio, 1.0);
 % -------- Number of acquired signals ------------------------------------
 % Number of acquired signals
 TrackedNr = nnz([channel.status]== 'T');
@@ -178,7 +182,7 @@ for channelNr = 1:settings.numberOfChannels
                 channel(channelNr).codePhase-1), 'bof');
         end
         
-        % Get a vector with the E6B tiered code sampled 1x/chip
+        % Get a vector with the E6B primary code sampled 1x/chip
         E6BCode = generateE6Bcode(channel(channelNr).PRN);  
         % Then make it possible to do early and late versions
         E6BCode = [E6BCode(settings.codeLength) E6BCode E6BCode(1)]; %#ok<AGROW>
@@ -193,8 +197,8 @@ for channelNr = 1:settings.numberOfChannels
             % SIMD serial correlator expects an int32 local code table.
             E6CodeTable = int32(E6CodeTable);
         elseif settings.correlatorType == 2
-            % GPU serial correlator expects an int8 local code table.
-            E6CodeTable = int8(E6CodeTable);
+            % GPU serial correlator expects a single local code table.
+            E6CodeTable = single(E6CodeTable);
         end
         
         %--- Perform various initializations ------------------------------
@@ -213,8 +217,8 @@ for channelNr = 1:settings.numberOfChannels
         oldCodeError = 0.0;
 
         % Carrier/Costas loop parameters
-        d2CarrError  = 0.0;
-        dCarrError   = 0.0;
+        oldCarrNco   = 0.0;
+        oldCarrError = 0.0;
 
         % For C/No computation
         CNoValue = zeros(1,3);
@@ -319,12 +323,10 @@ for channelNr = 1:settings.numberOfChannels
             % Combined code tracking error estimation using data and pilot
             % chaannel signals
             if (settings.pilotTRKflag == 1)
-                % Pilot channel(E6C) carrier phase is pi/2 rad ahead of the
-                % data channel (E6B) carrier phase.
-                % phase pi/2 back to the E6C phase.
+                % Use the E6C prompt I/Q values for the pilot discriminator.
                 QI = (pilot_I_P + 1i * pilot_Q_P) ;
                 
-                % atan is not affectede by the NH code modulation
+                % The Costas discriminator is insensitive to secondary-code polarity.
                 carrErrorQ = atan(imag(QI)/real(QI)) / (2.0 * pi);
                 
                 % As the data and pilot power is the same, so a simple 
@@ -333,9 +335,10 @@ for channelNr = 1:settings.numberOfChannels
             end
             
             % Implement carrier loop filter and generate NCO command
-            d2CarrError = d2CarrError + carrError * pf3;
-            dCarrError  = d2CarrError + carrError * pf2 + dCarrError;
-            carrNco     = dCarrError + carrError * pf1;
+            carrNco = oldCarrNco + (tau2carr/tau1carr) * ...
+                (carrError - oldCarrError) + carrError * (PDIcarr/tau1carr);
+            oldCarrNco   = carrNco;
+            oldCarrError = carrError;
 
             % Save carrier frequency for current correlation
             trackResults(channelNr).carrFreq(loopCnt) = carrFreq;
@@ -415,9 +418,7 @@ for channelNr = 1:settings.numberOfChannels
 
         end % for loopCnt
         
-        % If we got so far, this means that the tracking was successful
-        % Now we only copy status, but it can be update by a lock detector
-        % if implemented
+        % Copy channel status; no lock-detector decision is made here.
         trackResults(channelNr).status  = channel(channelNr).status;
         
     end % if a PRN is assigned

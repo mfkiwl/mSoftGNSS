@@ -42,11 +42,9 @@ function [navSolutions, eph] = postNavigation(trackResults, settings)
 %$Id: postNavigation.m,v 1.1.2.22 2006/08/09 17:20:11 dpl Exp $
 
 %% Check is there enough data to obtain any navigation solution ===========
-% It is necessary to have at least three messages (type 10, 11 and 
-% anyone of 30-34) to find satellite coordinates. Then receiver 
-% position can be found. The function requires at least 8 message.
-% One message length is 6 seconds, therefore we need at least 18 sec long
-% record (3 * 8 = 24 sec = 24000ms).
+% Satellite positions require message types 10, 11 and any one of 30-34.
+% Each B-CNAV2 frame lasts 3 s. Require at least eight frame durations
+% (24 s); the required message types must also be decoded below.
 if (settings.msToProcess < 24000)
     % Show the error message and exit
     disp('Record is to short. Exiting!');

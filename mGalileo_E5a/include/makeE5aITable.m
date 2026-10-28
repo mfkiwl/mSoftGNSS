@@ -1,9 +1,5 @@
 function E5aICodesTable = makeE5aITable(PRN,settings)
-%Function generates E5aI primary codes for specified satellites based on the settings
-%provided in the structure "settings". The codes are digitized at the
-%sampling frequency specified in the settings structure.
-%One row in the "E5aICodesTable" is one E5aI primary code. The row number is the PRN
-%number of the E5aI code.
+%Sample one E5aI primary-code period at settings.samplingFreq.
 %
 %E5aICodesTable = makeE5aITable(PRN,settings)
 %
@@ -11,8 +7,7 @@ function E5aICodesTable = makeE5aITable(PRN,settings)
 %       settings          - receiver settings
 %       PRN               - PRN number of the sequence.
 %   Outputs:
-%       E5aICodesTable    - an array of arrays (matrix) containing E5aI codes
-%                       for the specified PRN
+%       E5aICodesTable    - row vector of code samples for the specified PRN
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  

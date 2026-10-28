@@ -4,10 +4,10 @@
 %"acqSatelliteList" in the settings structure. Function saves code phase
 %and frequency of the detected signals in the "acqResults" structure.
 %
-%acqResults = acquisition(longSignal, settings)
+%acqResults = acquisitionGPU(fid,settings)
 %
 %   Inputs:
-%       longSignal    - 11 ms of raw signal from the front-end
+%       fid           - file identifier of the IF signal record.
 %       settings      - Receiver settings. Provides information about
 %                       sampling and intermediate frequencies and other
 %                       parameters including the list of the satellites to

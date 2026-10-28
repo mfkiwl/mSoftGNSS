@@ -15,16 +15,13 @@ function [eph] = ephemeris(navBitsBin,eph)
 %                   To prevent loss of previous decoded messages, the eph structure
 %                   must be passed onto this function.
 %   Outputs:
-%       TOW         - Time Of Week (TOW) of the first decoded CNAV-2 frame
-%                   in the bit stream (in seconds)
-%       eph         - SV ephemeris
+%       eph         - SV ephemeris; eph.TOW gives the start of the next
+%                   CNAV-2 frame in GPS seconds of week.
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  
 % (C) Written by Yafeng Li, Nagaraj C. Shivaramaiah and Dennis M. Akos
 
-% Reference: Adapted within the CU Multi-GNSS SDR receiver framework for GPS L1C.
-% Signal-specific comments in this file refer to GPS L1C.
 %
 %--------------------------------------------------------------------------
 %This program is free software; you can redistribute it and/or
@@ -53,7 +50,7 @@ function [eph] = ephemeris(navBitsBin,eph)
 if ~ischar(navBitsBin)
     error('The parameter BITS must be a character array!');
 end
-% 'bits' should be row vector for 'bin2dec' function.
+% 'navBitsBin' should be a row vector for 'bin2dec'.
 [a, b] = size(navBitsBin);
 if a > b
     navBitsBin = navBitsBin';
@@ -105,8 +102,7 @@ if isfield(eph, 'flag') && isempty(eph.flag)
     % Ephemeris Reference Time (toe): Bits 39-49
     % Unit: 300 seconds
     eph.t_oe = bin2dec(sf2(39:49)) * 300;
-    % For L1C, t_oc (clock reference) is typically same as t_oe
-    % eph.t_oc = eph.t_oe; 
+    % The CNAV-2 clock polynomial uses t_oe as its reference epoch.
     
     % --- Orbit Parameters (Ref: IS-GPS-800J Table 3.5-1) ---------------
     % Semi-major axis difference (Delta A): Bits 50-75
@@ -144,7 +140,7 @@ if isfield(eph, 'flag') && isempty(eph.flag)
     eph.IDOT = twosComp2dec(sf2(323:337)) * 2^(-44) * gpsPi;
     
     % --- Harmonic Correction Terms -------------------------------------
-    % NOTE: For L1C, these are in meters or radians directly. DO NOT multiply by PI.
+    % Harmonic corrections are expressed in metres or radians.
     
     % Amplitude of sine harmonic correction to angle of inclination
     eph.C_is = twosComp2dec(sf2(338:353)) * 2^(-30); % Radians
@@ -165,13 +161,13 @@ if isfield(eph, 'flag') && isempty(eph.flag)
     eph.URANED1Index = bin2dec(sf2(465:467));
     eph.URANED2Index = bin2dec(sf2(468:470));
     
-    % SV Clock Bias Correction Coefficient (af0): Bits 471-496
+    % SV clock-bias coefficient (af0) [s]: Bits 471-496
     eph.a_0 = twosComp2dec(sf2(471:496)) * 2^(-35);
     
-    % SV Clock Drift Correction Coefficient (af1): Bits 497-516
+    % SV clock-drift coefficient (af1) [s/s]: Bits 497-516
     eph.a_1 = twosComp2dec(sf2(497:516)) * 2^(-48);
     
-    % SV Clock Bias Correction Coefficient (af2): Bits 517-526
+    % SV clock-drift-rate coefficient (af2) [s/s^2]: Bits 517-526
     eph.a_2 = twosComp2dec(sf2(517:526)) * 2^(-60);
     
     % Group Delay Differential (TGD): Bits 527-539

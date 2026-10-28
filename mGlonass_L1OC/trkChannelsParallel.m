@@ -3,11 +3,8 @@ function [trackResults, channel]= trkChannelsParallel(fid, channel, settings)
 %
 %[trackResults, channel] = trkChannelsParallel(fid, channel, settings)
 %
-% This implementation tracks all active PRNs together. Each loop reads a
-% shared IF data buffer large enough for the active channel set, calls the
-% selected parallel correlator backend, and then updates the per-channel
-% DLL/PLL states. It is intended to match the tracking behavior of
-% trkChannelsSerial while reducing repeated file I/O and correlator calls.
+% Process all active PRNs at each tracking epoch using a shared IF buffer.
+% Each integration updates the per-channel DLL and PLL states.
 %
 %   Inputs:
 %       fid             - File identifier of the IF signal record.
@@ -54,7 +51,7 @@ function [trackResults, channel]= trkChannelsParallel(fid, channel, settings)
 %$Id: tracking.m,v 1.14.2.31 2006/08/14 11:38:22 dpl Exp $
 
 %% Initialize result structure ====================================
-% Default channel status. It is replaced after successful tracking.
+% Default channel status before processing.
 trackResults.status         = '-';      % No tracked signal, or lost lock
 % Number of coherent integrations to process.
 NumToProcess =  round(settings.msToProcess/1000/settings.intTime);
@@ -125,18 +122,16 @@ absoluteSample = settings.skipNumberOfSamples + ...
 
 % Generate L1OC code tables for all acquired signals.
 for channelNr = 1:channelCnt
-        % Get a vector with the B2a data code sampled 1x/chip
+        % Generate the L1OCd local code on the TDM grid
         fineFactor = settings.L1OCFineFactor;          % = 2
         L1OCdCode = generateL1OCdCode(channel(channelNr).PRN,settings);
-        % Repeat L1OCd to the same length as L1OCp. This keeps the L1OC data and
-        % pilot code tables compatible with the common QPSK MEX interface,
-        % so the same correlator code can process both branches.
+        % Repeat the data code to the 8 ms pilot-code period.
         L1OCdCodeFine = repelem(L1OCdCode,fineFactor);
         L1OCdCodeFine = repmat(L1OCdCodeFine, 1, 4); 
         % Add one chip of wraparound on both sides for early/late indexing.
         L1OCdCodeTable(channelNr,:) = [L1OCdCodeFine(end) L1OCdCodeFine L1OCdCodeFine(1)];  %#ok<AGROW>
 
-        % Generate the CL pilot code sampled at one value per equivalent chip.
+        % Generate the L1OCp pilot code on the fine TDM/BOC grid.
         L1OCpCode = generateL1OCpBOCCode(channel(channelNr).PRN,settings);
         % Add one chip of wraparound on both sides for early/late indexing.
         L1OCpCodeTable(channelNr,:) = [L1OCpCode(end) L1OCpCode L1OCpCode(1)]; %#ok<AGROW>
@@ -149,11 +144,11 @@ end
 L1OCCodeTable = [L1OCdCodeTable L1OCpCodeTable];
 
 if settings.correlatorType == 1
-% SIMD serial correlator expects an int32 local code table.
+% SIMD parallel correlator expects an int32 local code table.
 L1OCCodeTable = int32(L1OCCodeTable');
 elseif settings.correlatorType == 2
-% GPU serial correlator expects an int8 local code table.
-L1OCCodeTable = int8(L1OCCodeTable');
+% GPU parallel correlator expects a single local code table.
+L1OCCodeTable = single(L1OCCodeTable');
 end
 
 %% Initialize tracking variables ==================================
@@ -166,9 +161,7 @@ end
 %--- PLL variables --------------------------------------------------------
 % Coherent integration time used by the carrier loop filter.
 PDIcarr = settings.intTime;
-% Calculate second-order PLL filter coefficients. For L1OC the loop is
-% updated every 20 ms, so use unit loop gain; the 1 ms QPSK receivers'
-% k = 0.25 setting makes the discrete carrier loop unstable here.
+% Calculate second-order PLL filter coefficients with unit loop gain.
 [tau1carr, tau2carr] = calcLoopCoef(settings.pllNoiseBandwidth, ...
     settings.pllDampingRatio, 1.0);
 

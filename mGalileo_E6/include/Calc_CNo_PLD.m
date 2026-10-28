@@ -9,9 +9,8 @@ function [CNo, PllDetector]= Calc_CNo_PLD(trackResults,settings,loopCnt)
 %       settings          - Receiver settings
 %       loopCnt           - Iteration index for C/No calculation
 %   Outputs:
-%       CNo               - Estimated C/No for the given values of I and Q
-%                           CNo(1) is for data channel,CNo(21) is for pilot
-%                           channel, and CNo(2) is for the whole E6 signal  
+%       CNo               - C/No estimates [dB-Hz]: data, pilot and combined
+%                           signal in CNo(1), CNo(2) and CNo(3), respectively
 %       PllDetector       - PLL lock detector output for data and pilot
 %                            channels
 %
@@ -84,7 +83,7 @@ if settings.pilotTRKflag == 1
     Pav = sqrt(Zm^2 - Zv);
     % Calculate the variance of the noise
     Nv = 0.5 * (Zm - Pav);
-    %  C/No estimation for data channel
+    % C/No estimation for pilot channel
     PilotCNo = abs((1/T) * Pav / (2 * Nv));
     CNo(2) = 10*log10(PilotCNo);
     

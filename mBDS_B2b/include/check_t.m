@@ -19,10 +19,7 @@ function corrTime = check_t(time)
 half_week = 302400;     % seconds
 
 corrTime = time;
-% The message type 10 and 30 data sets are transmitted by the SV for 
-% periods of two hours.So the following condition indicates that beginning 
-% or end of week crossover has occurred, so the time should be corrected!
-% Refer to IS-GPS-200H P163.
+% Account for week rollover using a half-week threshold.
 if time > half_week
     corrTime = time - 2*half_week;
 elseif time < -half_week

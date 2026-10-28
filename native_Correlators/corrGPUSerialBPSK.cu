@@ -6,13 +6,11 @@
  * Authors: Yafeng Li (School of Automation, Beijing Information Science and Technology University)
  * Time: Apr, 21, 2026
  *
- * The core processing stages are intentionally kept aligned with the
- * GPU channel-parallel correlator:
+ * Processing stages:
  *   1) mixCarrReal() / mixCarrComplex()
  *   2) correlator()
  *
- * The difference is only in the MEX gateway framework: this file processes
- * one channel / one code period per call, matching trkChannelsSerial.m.
+ * Each call processes one code period for one channel.
  *===============================================================================*/
 
 #include "mex.h"
@@ -29,7 +27,7 @@
 /* Settings struct -------------------------------------------------------------
  * trkMode        : 0 - channel-serial tracking; 1 - channel-parallel tracking
  * fileType       : 1 - real samples; 2 - complex samples
- * earlyLateSpc   : half of the early - late code correlation spacing (chips)
+ * earlyLateSpc   : half of the early-late spacing in code-table points
  *------------------------------------------------------------------------------*/
 typedef struct {
     int trkMode;
@@ -63,10 +61,10 @@ struct GPU_Complex
     float i;
     __host__ __device__ GPU_Complex() : r(0.0f), i(0.0f) {}
 
-    // Constructor for a complex number with real amd imag parts of float
+    // Constructor for a complex number with float real and imaginary parts
     __host__ __device__ GPU_Complex(float realPart, float imagPart) : r(realPart), i(imagPart) {}
 
-    // Magnitude of a complex number
+    // Squared magnitude of a complex number
     __host__ __device__ float magnitude2() { return r * r + i * i; }
 
     __device__ GPU_Complex operator*(const GPU_Complex& a) {
@@ -177,9 +175,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 
     if (!initialized)
     {
-        /* Validate the MEX interface before dereferencing prhs[k]. Keep this
-           check in the first-time initialization path so later calls stay on
-           the existing fast path. */
+        /* Validate inputs before reading the MATLAB arguments on the first call. */
         checkInputs(nrhs, nlhs, prhs);
 
         // Basic setting
@@ -303,7 +299,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
  */
 __global__ void mixCarrReal(const short* d_pRawSignal, GPU_Complex* d_BasebandSignal, int blksize, float remCarrPhase, float carrPhaseStep)
 {
-    // CUDA version of floating point NCO and vector dot product integrated
+    // Generate the carrier replica and wipe off the carrier.
 
     for (int index = blockIdx.x * blockDim.x + threadIdx.x; index < blksize; index += blockDim.x * gridDim.x) {
         float sin, cos;
@@ -321,7 +317,7 @@ __global__ void mixCarrReal(const short* d_pRawSignal, GPU_Complex* d_BasebandSi
 __global__ void mixCarrComplex(const short* d_pRawSignal, GPU_Complex* d_BasebandSignal,
     int blksize, float remCarrPhase, float carrPhaseStep)
 {
-    // CUDA version of floating point NCO and vector dot product integrated
+    // Generate the carrier replica and wipe off the carrier.
     const short2* d_pRawSignalIQ = reinterpret_cast<const short2*>(d_pRawSignal);
     for (int index = blockIdx.x * blockDim.x + threadIdx.x; index < blksize; index += blockDim.x * gridDim.x) {
         float sin, cos;

@@ -66,7 +66,7 @@ settings.samplingFreq       = 30e6;               % [Hz]
 
 %% Code parameter setting
 % Define number of chips in a code period and code frequencies for 
-% equivalent CM+L2OCp overlay code
+% L2OCp primary code on the equivalent TDM grid
 settings.codeLength           = 10230 * 2;      % equivalent code within 20ms 
 settings.codeFreqBasis        = 0.5115e6 *2;    % [Hz] equivalent CM+L2OCp overlay code
 settings.L2OCFineFactor       = 2;

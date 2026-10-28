@@ -2,16 +2,15 @@ function B2bITable = makeB2bITable(PRN,settings)
 %Function generates B2b I codes for the specified PRN based on the settings
 %provided in the structure "settings". The codes are digitized at the
 %sampling frequency specified in the settings structure.
-%One row in the "B2bICodesTable" is one B2b I code. The row number is the PRN
-%number of the B2b I code.
+%The output contains one sampled B2bI code period.
 %
-%B2bICodesTable = makeB2bITable(settings, PRN)
+%B2bITable = makeB2bITable(PRN,settings)
 %
 %   Inputs:
+%       PRN             - PRN number of the sequence.
 %       settings        - receiver settings
 %   Outputs:
-%       B2bICodesTable    - an array of arrays (matrix) containing B2b I codes
-%                       for all satellite PRNs
+%       B2bITable       - sampled B2bI code for the specified PRN.
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  

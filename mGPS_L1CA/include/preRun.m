@@ -1,8 +1,6 @@
 function [channel] = preRun(acqResults, settings)
-%Function initializes tracking channels from acquisition data. The acquired
-%signals are sorted according to the signal strength. This function can be
-%modified to use other satellite selection algorithms or to introduce
-%acquired signal properties offsets for testing purposes.
+%Initialize tracking channels from acquisition results, ordered by
+%decreasing correlation-peak ratio.
 %
 %[channel] = preRun(acqResults, settings)
 %
@@ -57,7 +55,7 @@ channel = repmat(channel, 1, settings.numberOfChannels);
 
 %% Copy acquisition results ===============================================
 
-%--- Sort peaks to find strongest signals, keep the peak index information
+%--- Sort peak ratios in descending order and retain their indices -------
 [junk, PRNindexes]          = sort(acqResults.peakMetric, 2, 'descend');
 
 %--- Load information about each satellite --------------------------------
@@ -69,6 +67,6 @@ for ii = 1:min([settings.numberOfChannels, sum(acqResults.carrFreq ~= 0)])
     channel(ii).codePhase    = acqResults.codePhase(PRNindexes(ii));
     channel(ii).codeFreq     = acqResults.codeFreq(PRNindexes(ii));
     
-    % Set tracking into mode (there can be more modes if needed e.g. pull-in)
+    % Mark the initialized channel for tracking.
     channel(ii).status       = 'T';
 end

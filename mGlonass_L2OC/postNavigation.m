@@ -7,7 +7,7 @@ function [navSolutions, eph] = postNavigation(trackResults, settings)
 
 activeChnList = find([trackResults.status] ~= '-');
 
-% Initialize ephemeris placeholder array
+% Initialize satellite status without decoded ephemerides
 eph = repmat(eph_structure_init(), 1, settings.numberOfChannels);
 
 for channelNr = activeChnList

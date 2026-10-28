@@ -86,7 +86,6 @@ for satNr = 1 : numOfSatellites
     
     % ---- 2.2 Compute semi-major axis ---------------------------------
     % Semi-Major Axis at reference time
-    % ** This is different from GPS L2C CNAV **
     A_0   = A_REF + eph(prn).deltaA;
     % Semi-Major Axis
     A     = A_0 + eph(prn).ADot * tk;
@@ -95,7 +94,6 @@ for satNr = 1 : numOfSatellites
     %Initial mean motion
     n0  = sqrt(GM / A_0^3);
     % Mean motion difference from computed value
-    % ** This is different from GPS L2C CNAV **
     delta_n = eph(prn).delta_n_0 + 0.5 * eph(prn).delta_n_0Dot *tk;
     % Mean motion
     n   = n0 + delta_n;
@@ -149,7 +147,6 @@ for satNr = 1 : numOfSatellites
     
     % ---- 2.11 Longitude of Ascending Node ----------------------------
     % Rate of right ascension
-    % ** This is different from GPS L2C CNAV **
     omegaDot = omegaDot_REF + eph(prn).delta_omegaDot;
     % Corrected Longitude of Ascending Node
     Omega = eph(prn).omega_0 + (omegaDot - Omegae_dot)*tk - ...
@@ -212,7 +209,6 @@ for satNr = 1 : numOfSatellites
 %     % Relativistic correction
 %     dtrRat = F * eph(prn).e * sqrt(A) * cos(E) *dE;
 %     
-%     % The clock drift is relative small, thus can be neglectde at most time.
 %     satClkCorrRat(satNr) = 2* eph(prn).a_f2 * dt + eph(prn).a_f1 + dtrRat;
     
 end % for satNr = 1 : numOfSatellites

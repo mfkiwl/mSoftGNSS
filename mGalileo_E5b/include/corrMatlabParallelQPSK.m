@@ -1,12 +1,9 @@
 function correValues = corrMatlabParallelQPSK(settings, rawSignal, E5bCodeTable, ...
     remCarrPhase, carrPhaseStep, remCodePhase, codePhaseStep, ...
     startIdx, chSampSize, isDataRead)
-%CORRMATLABPARALLELQPSK Matlab implementation of the channel-parallel QPSK tracking correlator.
-%   This function keeps the same calling interface as the SIMD / GPU
-%   correlators so it can be used directly in trkChannelsParallel.m when
-%   settings.correlatorType == 0.
+%Correlate the Galileo E5b data and pilot codes for all active channels.
 %
-%   Input/output layout follows the MEX correlators:
+%   Output layout:
 %       correValues = [I_E; Q_E; I_P; Q_P; I_L; Q_L;
 %                      pilot_I_E; pilot_Q_E; pilot_I_P;
 %                      pilot_Q_P; pilot_I_L; pilot_Q_L]
@@ -24,10 +21,10 @@ elseif (settings.fileType == 2) && (isDataRead || isempty(rawSignalI) || isempty
     rawSignalQ = rawSignal(2:2:end)';
 end
 
-% Number of active tracking channels in this millisecond.
+% Number of active tracking channels in this integration epoch.
 channelCnt = numel(startIdx);
 
-% Output order per channel: [IE QE IP QP IL QL]^T.
+% Six data and six pilot correlation values per channel.
 correValues = zeros(12, channelCnt);
 
 % Define early-late offset (in chips).
@@ -90,7 +87,7 @@ for channelNr = 1:channelCnt
     carrCos = cos(trigarg);
     carrSin = sin(trigarg);
 
-    %% Do correlation to generate the six standard accumulated values -----
+    %% Accumulate Early/Prompt/Late I/Q values for each code branch --------
     % First mix to baseband
     if settings.fileType == 1
         iBasebandSignal = rawSignalBlock .* carrCos;

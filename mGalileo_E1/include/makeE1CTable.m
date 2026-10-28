@@ -3,10 +3,11 @@ function E1cCodesTable = makeE1CTable(settings,PRN)
 % on the settings provided in the structure "settings". The codes are 
 % digitized at the sampling frequency specified in the settings structure.
 %
-% DataCodesTable = makeDataTable(settings,PRN)
+% E1cCodesTable = makeE1CTable(settings,PRN)
 %
 %   Inputs:
 %       settings        - receiver settings
+%       PRN             - Galileo satellite PRN number
 %   Outputs:
 %       E1cCodesTable  - sampled Galileo E1C BOC(1,1) spreading waveform
 % 
@@ -40,10 +41,10 @@ samplesPerCode = round(settings.samplingFreq / ...
 
 %--- Find time constants --------------------------------------------------
 ts = 1/settings.samplingFreq;           % Sampling period in sec
-tc = 1/settings.codeFreqBasis/12;        % E1C BOC(1,1) chip period in sec
+tc = 1/settings.codeFreqBasis/12;        % 12-point local-code grid interval in sec
 
 %--- Generate E1C BOC(1,1) code for given PRN -----------------------------
-E1cCode= generateE1Ccode(PRN);
+E1cCode= generateE1Ccode(PRN, 'BOC11');
 
 %=== Digitizing ===========================================================
 

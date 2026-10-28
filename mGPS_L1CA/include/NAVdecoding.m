@@ -157,7 +157,7 @@ navBitsSamples = I_P_InputBits(subFrameStart - 20 : ...
 navBitsSamples = reshape(navBitsSamples, ...
     20, (size(navBitsSamples, 1) / 20));
 
-%--- Sum all samples in the bits to get the best estimate -------------
+%--- Sum all samples in each bit -------------------------------------
 navBits = sum(navBitsSamples);
 
 %--- Now threshold and make 1 and 0 -----------------------------------

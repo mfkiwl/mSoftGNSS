@@ -4,10 +4,10 @@ function acqResults = acquisitionCPU(fid, settings)
 %"acqSatelliteList" in the settings structure. Function saves code phase
 %and frequency of the detected signals in the "acqResults" structure.
 %
-%acqResults = acquisition(longSignal, settings)
+%acqResults = acquisitionCPU(fid, settings)
 %
 %   Inputs:
-%       longSignal    - 20 ms of raw IF signal from the front-end.
+%       fid           - File identifier of the raw IF signal recording.
 %       settings      - Receiver settings. Provides information about
 %                       sampling and intermediate frequencies and other
 %                       parameters including the list of the satellites to
@@ -25,8 +25,6 @@ function acqResults = acquisitionCPU(fid, settings)
 % Based on the original framework for GPS C/A SDR by Darius Plausinaitis,
 % Peter Rinder, Nicolaj Bertelsen and Dennis M. Akos
 %
-% Reference: Adapted within the CU Multi-GNSS SDR receiver framework for Galileo E1.
-% Signal-specific comments in this file refer to Galileo E1.
 %
 %--------------------------------------------------------------------------
 %This program is free software; you can redistribute it and/or
@@ -67,9 +65,8 @@ if strcmp(settings.dataType,'int16')
 else
     fseek(fid, dataAdaptCoeff*settings.skipNumberOfSamples,'bof');
 end
-% Read data for acquisition: use 50 code length data to do fine
-% acquisition; To ensure at least 50 complete E1 code periods are
-% included, 51 code periods of data are needed
+% Fine acquisition uses 50 E1 code periods (200 ms).
+% Read 51 periods to include 50 complete periods after code alignment.
 longSignal  = fread(fid, dataAdaptCoeff*51*samplesPerCode, settings.dataType)';
 % Convert complex data into normal representation.
 if (dataAdaptCoeff == 2)
@@ -96,8 +93,8 @@ acqResults.codePhase    = zeros(1, max(settings.acqSatelliteList));
 acqResults.peakMetric   = zeros(1, max(settings.acqSatelliteList));
 
 %--- Variables for fine acquisition ---------------------------------------
-% Code resampling index used by both E1C code fine acquisition and CL phase search.
-% codeValueIndex maps each input sample to the corresponding local code chip.
+% Code resampling index for 200 ms of E1C fine acquisition.
+% Map each input sample to the 12-point-per-primary-chip local-code grid.
 tc = 1/(settings.codeFreqBasis*12);
 codeValueIndex = floor(ts * (0: 50*samplesPerCode-1)/tc);
 codeValueIndex = rem(codeValueIndex, settings.codeLength*12) + 1;
@@ -191,12 +188,12 @@ for PRN = settings.acqSatelliteList
         fprintf('%02d ', PRN);
 
         % Generate one unresampled E1C code period.
-        E1CPilotCode = generateE1Ccode(PRN);
+        E1CPilotCode = generateE1Ccode(PRN, 'BOC11');
 
         % Resample the local pilot code over 200 ms
         E1CPilotCode200ms = E1CPilotCode(codeValueIndex);
 
-        % Extract 10 E1C code periods (200 ms) of incoming signal starting from the
+        % Extract 50 E1C code periods (4 ms each, 200 ms total) starting from the
         % detected E1C code phase.
         sig200ms = longSignal(codePhaseMax:codePhaseMax + 50*samplesPerCode -1);
 

@@ -105,9 +105,8 @@ Frame2_soft_Q = reshape(tempBits_Q(Frame2Colum, :)', 1, 1200);
 Frame3_soft_I = reshape(tempBits_I(Frame3Colum, :)', 1, 528);
 Frame3_soft_Q = reshape(tempBits_Q(Frame3Colum, :)', 1, 528);
 
-% Keep the deinterleaved systematic hard decisions as a safe fallback. The
-% LDPC code is systematic, so the first information bits must remain usable
-% when EMS does not converge on a valid codeword.
+% Retain systematic hard decisions when the EMS output fails the syndrome
+% check. The navigation decoder checks the resulting subframe CRC.
 Frame2_hard = Frame2_soft_I > 0;
 Frame3_hard = Frame3_soft_I > 0;
 

@@ -41,14 +41,9 @@ function [navSolutions, eph] = postNavigation(trackResults, settings)
 %$Id: postNavigation.m,v 1.1.2.22 2006/08/09 17:20:11 dpl Exp $
 
 %% Check is there enough data to obtain any navigation solution ===========
-% It is necessary to have at least three subframes (number 1, 2 and 3) to
-% find satellite coordinates. Then receiver position can be found too.
-% The function requires all 5 subframes, because the tracking starts at
-% arbitrary point. Therefore the first received subframes can be any three
-% from the 5.
-% One subframe length is 6 seconds, therefore we need at least 30 sec long
-% record (5 * 6 = 30 sec = 30000ms). We add extra seconds for the cases,
-% when tracking has started in a middle of a subframe.
+% L1OC positioning requires CRC-valid string types 10, 11 and 12.
+% Each normal L1OCd string spans 2 s. The 36 s input check allows for
+% tracking transients and an arbitrary starting point.
 
 if (settings.msToProcess < 36000) 
     % Show the error message and exit

@@ -1,7 +1,7 @@
 function [eph, firstSubFrame, TOW] = BCNAV2decoding(I_P_InputBits, Q_P_InputBits, PRNin)
 % BCNAV2decoding decodes BeiDou B2a B-CNAV2 navigation message.
 %
-% This version follows the structure of BCNAV3decoding:
+% LDPC decoding of the despread prompt correlations:
 %   decodedNavBits = B2aLDPCDecoder(navBits_soft_I, navBits_soft_Q);
 %
 % Inputs:
@@ -75,14 +75,12 @@ addpath ('include/ldpcDecoder/')
 %% B-CNAV2 decoding ========================================================
 for i = 1:length(index)
 
-    % One B-CNAV2 frame:
-    % 600 navigation bits before LDPC decoding
-    % Each bit is spread by 5-chip secondary code
-    % Total length = 600*5 = 3000 samples
+    % One B-CNAV2 frame contains 600 symbols, each spread by the
+    % five-chip secondary code: 3000 tracking epochs of 1 ms.
     if ((length(bits_hard) - index(i) + 1) >= 600 * 5)
 
         % -----------------------------------------------------------------
-        % Extract one complete 3000-sample B-CNAV2 frame
+        % Extract one complete 3 s B-CNAV2 frame
         % -----------------------------------------------------------------
         frame_soft_I = raw_soft_bits_I(index(i) : index(i) + 600*5 - 1);
         frame_soft_Q = raw_soft_bits_Q(index(i) : index(i) + 600*5 - 1);

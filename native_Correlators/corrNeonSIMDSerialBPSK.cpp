@@ -6,14 +6,12 @@
  * Authors: Yafeng Li (School of Automation, Beijing Information Science and Technology University)
  * Time: Aug, 1, 2026
  *
- * The core processing stages are intentionally kept aligned with the
- * channel-parallel SIMD correlator:
+ * Processing stages:
  *   1) mixCarrReal() / mixCarrComplex()
  *   2) localCodeGen()
  *   3) correlator()
  *
- * The difference is only in the MEX gateway framework: this file processes
- * one channel / one code period per call, matching trkChannelsSerial.m.
+ * Each call processes one code period for one channel.
  *==============================================================================*/
 
 #include "mex.h"
@@ -95,7 +93,7 @@ static Settings settings;
 /* The gateway function --------------------------------------------------------
  * Args   : prhs[0] settings      I   receiver settings structure
  *          prhs[1] rawSignal     I   one code-period IF block for one channel
- *          prhs[2] caCode        I   one PRN code vector [lastChip code firstChip]
+ *          prhs[2] caCode        I   one PRN code vector with leading and trailing guards
  *          prhs[3] remCarrPhase  I   residual carrier phase (rad)
  *          prhs[4] carrPhaseStep I   carrier phase step (rad/sample)
  *          prhs[5] remCodePhase  I   residual code phase (chips)
@@ -110,14 +108,10 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 	double* corrValues;
 
 	/* --------------------- One-time persistent buffer allocation ---------------------
-	   Keep this framework close to corrX86SIMDSerialBPSK.cpp: allocate once on the first call
-	   and reuse the same aligned buffers on later code periods. The serial wrapper
-	   intentionally avoids per-call work-buffer allocation and dynamic reallocation. */
+	   Allocate aligned buffers on the first call and reuse them for later epochs. */
 	if (!initialized) {
 		/* ----------------- Validate and cache the serial settings once -----------------
-		   This serial wrapper assumes the MATLAB-side settings stay unchanged after the
-		   first call. If settings or input types change later, clear the MEX file and
-		   reinitialize so the cached framework state matches the new configuration. */
+		   Cached settings and input types remain fixed until the MEX file is cleared. */
 		// gateway check
 		checkInputs(nlhs, nrhs, prhs);
 		// Basic setting 
@@ -144,8 +138,8 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 	}
 
 	/* ----------------- Unpack the scalar serial inputs -----------------
-	   Unlike corrX86SIMDParallelBPSK.cpp, this wrapper serves one channel and one code period
-	   per call, so every phase/code parameter is a scalar instead of a channel array. 
+	   This wrapper serves one channel and one code period per call,
+	   so every phase/code parameter is a scalar instead of a channel array. 
      * Input order:
      *   prhs[0]  - settings
      *   prhs[1]  - rawSignal
@@ -170,9 +164,8 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 	}
 
 	/* --------------------- Initialize output and run the three-stage core ---------------------
-	   The output layout follows trkChannelsSerial.m directly:
-	     [IE QE IP QP IL QL]
-	   and the processing stages are intentionally unchanged from the shared SIMD core. */
+	   Output layout:
+	     [IE QE IP QP IL QL] */
 	plhs[0] = mxCreateDoubleMatrix(1, 6, mxREAL);
 	corrValues = (double*)mxGetData(plhs[0]);
 
@@ -306,14 +299,15 @@ void mixCarrReal(const short *rawSignal, double carrPhaseStep, double remCarrPha
 	/* ----------------- Scalar tail: remaining blksize % 16 samples ----------------- */
 	/* Reconstruct the double phase at the first leftover sample and advance
 	   it in double precision. Each LUT index uses an int cast (truncation
-	   toward zero) followed by % 16, rather than SIMD nearest-even rounding. */
+	   toward zero) followed by & 0x0F, rather than SIMD nearest-even rounding. */
 	remCarrPhase = simdSamples * phaseStep + remCarrPhase;
 	for (; sampleIndex < blksize; ++sampleIndex, ++IFData, ++iBasebandSignal, ++qBasebandSignal) {
 		short sample = IFData[0];
 		if (settings.rShiftBits != 0) {
 			sample = (short)(sample >> settings.rShiftBits);
 		}
-		int n = ((int)remCarrPhase) % 16;
+		/* Wrap the truncated phase to 0..15, including negative phases. */
+		int n = ((int)remCarrPhase) & 0x0F;
 		iBasebandSignal[0] = (short)(cost[n] * sample);
 		qBasebandSignal[0] = (short)(sint[n] * sample);
 		remCarrPhase += phaseStep;
@@ -449,7 +443,7 @@ void mixCarrComplex(const short* rawSignal, double carrPhaseStep, double remCarr
 	/* ----------------- Scalar tail: remaining blksize % 16 samples ----------------- */
 	/* Reconstruct the double phase at the first leftover sample and advance
 	   it in double precision. Each LUT index uses an int cast (truncation
-	   toward zero) followed by % 16, rather than SIMD nearest-even rounding. */
+	   toward zero) followed by & 0x0F, rather than SIMD nearest-even rounding. */
 	remCarrPhase = simdSamples * phaseStep + remCarrPhase;
 	for (; sampleIndex < blksize; ++sampleIndex, IFData += 2, ++iBasebandSignal, ++qBasebandSignal)
 	{
@@ -461,7 +455,8 @@ void mixCarrComplex(const short* rawSignal, double carrPhaseStep, double remCarr
 		}
 		/* Form the same complex multiply using cost[n] and sint[n] below;
 		   each complete I/Q expression is converted to short. */
-		int n = ((int)remCarrPhase) % 16;
+		/* Wrap the truncated phase to 0..15, including negative phases. */
+		int n = ((int)remCarrPhase) & 0x0F;
 		iBasebandSignal[0] = (short)(cost[n] * sampleI + sint[n] * sampleQ);
 		qBasebandSignal[0] = (short)(cost[n] * sampleQ - sint[n] * sampleI);
 		remCarrPhase += phaseStep;
@@ -488,10 +483,9 @@ void localCodeGen(const int *caCode, size_t codeLen, double remCodePhase, double
 	if (remCodePhase >= codeLen)
 		remCodePhase -= floor(remCodePhase / codeLen)*codeLen;
 
-	/* caCode contains [lastChip, one code period, firstChip]. Guard chips
-	   cover the adjacent period boundaries; generated indexes are not wrapped
-	   per sample. The caller supplies phases and a block size that keep all
-	   E/P/L indexes within caCode[0..codeLen-1]. */
+	/* caCode contains one code period with leading and trailing guard points.
+	   The caller supplies the guard-phase offset and enough guard points for
+	   all E/P/L indexes; no per-sample wrapping is performed here. */
 	short *eCode = localCode[0], *pCode = localCode[1], *lCode = localCode[2];
 
 	int32x4x2_t Index_reg1, Index_reg2;
@@ -799,8 +793,7 @@ static Settings parseSettings(const mxArray* s)
 
 	cfg.trkMode = getStructIntField(s, "trkMode");
 	cfg.fileType = getStructIntField(s, "fileType");
-	/* dllCorrelatorSpacing is fractional for GPS L1 C/A (default 0.5 chip),
-	   so reading it as int collapses Early/Prompt/Late into the same code. */
+	/* Read fractional Early/Late spacing without integer truncation. */
 	cfg.earlyLateSpc = getStructDoubleField(s, "dllCorrelatorSpacing");
 	cfg.correlatorType = getStructIntField(s, "correlatorType");
 	if (cfg.correlatorType == 1) // SIMD correlator

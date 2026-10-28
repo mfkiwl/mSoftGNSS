@@ -128,8 +128,8 @@ if settings.correlatorType == 1
     % SIMD backend expects one int32 code table shared by all active channels.
     L3OCCodeTable = int32(L3OCCodeTable');  
 elseif settings.correlatorType == 2
-    % GPU backend expects one int8 code table shared by all active channels.
-    L3OCCodeTable = int8(L3OCCodeTable');
+    % GPU backend expects one single code table shared by all active channels.
+    L3OCCodeTable = single(L3OCCodeTable');
 end
 
 %% Initialize tracking variables ==================================
@@ -400,9 +400,7 @@ for loopCnt =  1:codePeriods
         if loopCnt == codePeriods
             % Each channel's tracked PRN
             trackResults(channelNr).PRN     = channel(channelNr).PRN;
-            % If we got so far, this means that the tracking was successful
-            % Now we only copy status, but it can be update by a lock detector
-            % if implemented
+            % Copy the acquisition status; no lock decision is made here.
             trackResults(channelNr).status  = channel(channelNr).status;
         end
 

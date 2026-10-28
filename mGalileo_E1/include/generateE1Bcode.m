@@ -1,16 +1,18 @@
-function E1Bcode = generateE1Bcode(PRN)
-% This function generates Galileo E1B BOC(1,1) code in bipolar
-% format (-1, +1) PRNs 1 to 50 (no care is taken if PRN number is > 50)
-% The memory codes are stored in the file gale1bcode.dat
+function E1Bcode = generateE1Bcode(PRN,codeType)
+% This function generates Galileo E1B CBOC(+) or BOC(1,1) code for PRNs
+% 1 to 50. Both code types use 12 samples per primary-code chip.
+% The primary memory codes are stored in the file E1b.dat.
 %
-% E1Bcode = generateE1Bcode(PRN)
+% E1Bcode = generateE1Bcode(PRN, codeType)
 %
 %   Inputs:
 %       PRN         - PRN number of the sequence.
+%       codeType    - 'CBOC' for full-band CBOC(+), or 'BOC11' for
+%                     narrowband BOC(1,1).
 %
 %   Outputs:
-%       E1Bcode      - a vector containing the desired E1B code sequence
-%                   (chips).
+%       E1Bcode     - row vector containing the E1B waveform, with
+%                     4092 * 12 samples per primary-code period.
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR
@@ -43,41 +45,39 @@ PRIMARY_CODE_LENGTH = 4092;
 % Number of Galileo E1B PRN codes
 NUM_GAL_PRNS = 50;
 
-% File for the memery code
+% File containing the primary memory codes
 fid = fopen('E1b.dat');
 
-% Read the code sequenrences out
+% Read all primary code sequences
 allprncode = fscanf(fid,'%d', PRIMARY_CODE_LENGTH*NUM_GAL_PRNS);
 
-% Take the code sequenrences for the specified PRN number
+% Select the primary code sequence for the specified PRN
 e1b_primary_code= allprncode(...
     (PRN-1)*PRIMARY_CODE_LENGTH+1:PRN*PRIMARY_CODE_LENGTH);
 
 % Change to bipolar format (-1, +1)
 e1bCodeRaw = 1-2*e1b_primary_code;
 
-%--- Add BOC(1,1) subcarrier ----------------------------------------------
-E1Bcode = zeros(1, length(e1bCodeRaw)*2);
-jj = 1;
-for ii = 1:2:length(E1Bcode)-1
-    E1Bcode(ii)   =  e1bCodeRaw(jj);
-    E1Bcode(ii+1) = - e1bCodeRaw(jj);
-    jj = jj + 1;
-end
 % Close the fid
 fclose(fid);
 
-%--- CBOC(+) implementatin for data channel -------------------------------
-codeType = 1;  % 0-BOC(1,1); 1-CBOC(+)
-if codeType == 1
+%--- Select the E1B data subcarrier waveform ------------------------------
+% 'CBOC' uses CBOC(+); 'BOC11' uses BOC(1,1) on the same 12-point grid.
+if strcmp(codeType, 'CBOC')
     plus0 = sqrt(10/11) + sqrt(1/11);
     plus1 = sqrt(10/11) - sqrt(1/11);
     minus0 = -sqrt(10/11) + sqrt(1/11);
     minus1 = -sqrt(10/11) - sqrt(1/11);
-
-    boc61Wave = [plus0, plus1, plus0, plus1, plus0, plus1,...
-        minus0, minus1, minus0, minus1,minus0, minus1];
-    cbocwave = repmat(boc61Wave,1,PRIMARY_CODE_LENGTH);
-    E1Bcode = repelem(e1bCodeRaw,12)' .* cbocwave;
+elseif strcmp(codeType, 'BOC11')
+    plus0 = 1;
+    plus1 = 1;
+    minus0 = -1;
+    minus1 = -1;
 end
+
+% Apply the selected 12-point subcarrier template to each primary chip.
+boc61Wave = [plus0, plus1, plus0, plus1, plus0, plus1,...
+    minus0, minus1, minus0, minus1,minus0, minus1];
+cbocWave = repmat(boc61Wave,1,PRIMARY_CODE_LENGTH);
+E1Bcode = repelem(e1bCodeRaw,12)' .* cbocWave;
 

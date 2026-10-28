@@ -3,17 +3,14 @@ function [trackResults, channel]= trkChannelsSerial(fid, channel, settings)
 %
 %[trackResults, channel] = trkChannelsSerial(fid, channel, settings)
 %
-% This implementation processes one channel at a time. For every active
-% PRN it reads one integration interval from the IF file, calls the selected
-% correlator backend, and updates the carrier PLL and code DLL before
-% moving to the next interval. The serial form is useful as the reference
-% implementation for the SIMD/GPU accelerated correlators.
+% Process each PRN over the full tracking interval before the next PRN.
+% Each integration updates the channel's DLL and PLL.
 %
 %   Inputs:
 %       fid             - File identifier of the IF signal record.
 %       channel         - Channel state prepared from acquisition results.
 %                       Each active element contains PRN, acquired carrier
-%                       frequency, code phase,code phase and status.
+%                       frequency, code phase and status.
 %       settings        - Receiver settings, including sampling frequency,
 %                       integration time, loop bandwidths, correlator type,
 %                       file format and L2OC code definitions.
@@ -54,7 +51,7 @@ function [trackResults, channel]= trkChannelsSerial(fid, channel, settings)
 %$Id: tracking.m,v 1.14.2.31 2006/08/14 11:38:22 dpl Exp $
 
 %% Initialize result structure ============================================
-% Default channel status. It is replaced after successful tracking.
+% Default channel status before processing.
 trackResults.status         = '-';      % No tracked signal, or lost lock
 % Number of coherent integrations to process.
 NumToProcess =  round(settings.msToProcess/1000/settings.intTime);
@@ -106,9 +103,7 @@ PDIcode = settings.intTime;
 %--- PLL variables --------------------------------------------------------
 % Coherent integration time used by the carrier loop filter.
 PDIcarr = settings.intTime;
-% Calculate second-order PLL filter coefficients. For L2OC the loop is
-% updated every 20 ms, so use unit loop gain; the 1 ms QPSK receivers'
-% k = 0.25 setting makes the discrete carrier loop unstable here.
+% Calculate second-order PLL filter coefficients with unit loop gain.
 [tau1carr, tau2carr] = calcLoopCoef(settings.pllNoiseBandwidth, ...
     settings.pllDampingRatio, 1.0);
 % -------- Number of acquired signals --------------------------------------
@@ -192,8 +187,8 @@ for channelNr = 1:settings.numberOfChannels
             % SIMD serial correlator expects an int32 local code table.
             L2OCCodeTable = int32(L2OCCodeTable);
         elseif settings.correlatorType == 2
-            % GPU serial correlator expects an int8 local code table.
-            L2OCCodeTable = int8(L2OCCodeTable);
+            % GPU serial correlator expects a single local code table.
+            L2OCCodeTable = single(L2OCCodeTable);
         end
         %--- Perform various initializations ------------------------------
         % Initial code NCO frequency.
@@ -270,8 +265,7 @@ for channelNr = 1:settings.numberOfChannels
             % Carrier phase step in rad/sample based on the current
             % carrier NCO and the sampling frequency.
             carrPhaseStep = carrFreq * 2.0 * pi / settings.samplingFreq;
-            % Convert the residual phase within the current CM interval into
-            % an absolute phase within the 75-period CL sequence.
+            % Residual phase within the current 20 ms L2OCp primary-code period.
             remCodePhaseL2OC = remCodePhase;
             settingsCorr = settings;
             settingsCorr.codeLength           = settings.codeLength * fineFactor;
@@ -377,8 +371,8 @@ for channelNr = 1:settings.numberOfChannels
             tempCNoValue = CNoValue;
         end % for loopCnt
 
-        % If tracking reached the end of the requested interval, copy the
-        % channel status. A future lock detector can replace this decision.
+        % Copy the acquisition status after completing the tracking interval.
+        % This status does not indicate measured signal lock.
         trackResults(channelNr).status  = channel(channelNr).status;
 
     end % if a PRN is assigned

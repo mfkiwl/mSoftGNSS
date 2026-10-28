@@ -26,7 +26,7 @@ function [satPositions, satClkCorr] = satpos(transmitTime, prnList, ...
 %% Initialize constants ===================================================
 numOfSatellites = size(prnList, 2);
 
-% GPS constants
+% BDS broadcast-orbit constants
 
 BeiDouPi       = 3.1415926535898;  % Pi used in the GPS coordinate 
                                    % system

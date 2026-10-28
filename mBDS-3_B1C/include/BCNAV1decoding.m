@@ -24,8 +24,7 @@ TOW = inf;
 if settings.pilotACQflag == 1
     syncBits_soft = trackResults(channelNr).Pilot_I_P;
 else
-    % In narrowband tracking, PLL tracks the data-channel phase, while the
-    % pilot channel phase is pi/2 ahead. Therefore, power is in Q prompt.
+    % Use the Q prompt for frame synchronization when pilotACQflag is zero.
     syncBits_soft = trackResults(channelNr).Pilot_Q_P;
 end
 
@@ -57,8 +56,7 @@ addpath('include/ldpcDecoder');
 raw_soft_bits_I = trackResults(channelNr).I_P;
 
 % Q branch is used as noise/reference information for LLR generation.
-% If your tracking result does not contain Q_P, you need to add it in the
-% tracking output. Here a fallback is given to avoid immediate interruption.
+% Use the Q prompt for noise estimation; substitute zeros if it is absent.
 if isfield(trackResults, 'Q_P')
     raw_soft_bits_Q = trackResults(channelNr).Q_P;
 else

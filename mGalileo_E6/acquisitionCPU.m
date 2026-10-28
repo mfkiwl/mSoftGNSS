@@ -183,7 +183,7 @@ for PRN = settings.acqSatelliteList
         E6bCode = generateE6Bcode(PRN);
         E6cCode = generateE6Ccode(PRN,1);
         
-        % E5a codes sample index
+        % E6 primary-code sampling indices
         codeValueIndex = floor( (0 : 200*samplesPerCode -1) * ts ...
             * settings.codeFreqBasis);
         

@@ -1,4 +1,13 @@
 function E6Bcode = generateE6Bcode(PRN)
+%Generate the 5115-chip Galileo E6B primary code in bipolar form (-1,+1).
+%
+%E6Bcode = generateE6Bcode(PRN)
+%
+%   Inputs:
+%       PRN     - satellite PRN number, 1 to 50.
+%   Outputs:
+%       E6Bcode - row vector containing one primary-code period.
+%
 E6B_code=...
 [%E6-B Code No 01
 'E6648AA5EFF0907A170377FB20CEDEE1E8D253DAC2496831010336B444276BAAB17E', ...

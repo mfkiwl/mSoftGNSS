@@ -1,5 +1,5 @@
 function acqResults = acquisitionGPU(fid,settings)
-% Performs cold-start acquisition for GLONASS L1OC signals using CPU-based
+% Performs cold-start acquisition for GLONASS L1OC signals using GPU-based
 % MATLAB arrays. The function searches all PRNs listed in
 % settings.acqSatelliteList and stores the detected L1OCd code phase, L1OCp code
 % phase, coarse/fine carrier frequency, and peak metric in the acqResults
@@ -249,7 +249,7 @@ for PRN = settings.acqSatelliteList
 
         L1OCpCodeFine = gpuArray(single(generateL1OCpBOCCode(PRN,settings)));
 
-        % Search the 4 possible CL-code alignments relative to the L1OCd period.
+        % Search the four L1OCp alignments relative to the L1OCd period.
         for ind = 1:4
             L1OCpCodeSample = L1OCpCodeFine(codeValueIndexFine + ...
                 settings.codeLength * fineFactor * (ind - 1));

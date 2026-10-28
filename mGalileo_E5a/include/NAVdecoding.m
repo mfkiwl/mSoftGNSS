@@ -1,27 +1,19 @@
 function [eph, firstSubFrame,TOW] = NAVdecoding(I_P)
 
-% findPreambles finds the first preamble occurrence in the bit stream of
-% each channel. The preamble is verified by check of the spacing between
-% preambles (6sec) and parity checking of the first two words in a
-% subframe. At the same time function returns list of channels, that are in
-% tracking state and with valid preambles in the nav data stream.
+%Find a CRC-valid Galileo F/NAV page boundary and decode ephemeris data.
+%Preamble spacing and convolutional decoding are checked before CRC-24Q.
 %
-%[eph, subFrameStart,SOW] = CNAVdecoding(I_P_InputBits)
+%[eph, firstSubFrame, TOW] = NAVdecoding(I_P)
 %
 %   Inputs:
-%       I_P_InputBits   - output from the tracking function
+%       I_P             - prompt-I tracking outputs at 1 ms intervals.
 %
 %   Outputs:
-%       firstSubFrame   - Starting positions of the first message in the
-%                       input bit stream I_P_InputBits in each channel.
-%                       The position is CNAV bit(20ms before convolutional decoding)
-%                       count since start of tracking. Corresponding value will
-%                       be set to inf if no valid preambles were detected in
-%                       the channel.
-%       SOW             - Time Of Week (SOW) of the first message(in seconds).
-%                       Corresponding value will be set to inf if no valid preambles
-%                       were detected in the channel.
-%       eph             - SV ephemeris.
+%       eph             - decoded satellite ephemeris and message flags.
+%       firstSubFrame   - one-based page-start index in I_P, or inf when no
+%                         valid candidate is found.
+%       TOW             - decoded GST time-of-week reference [s], or inf
+%                         when no valid candidate is found.
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  
@@ -44,9 +36,7 @@ function [eph, firstSubFrame,TOW] = NAVdecoding(I_P)
 %USA.
 %--------------------------------------------------------------------------
 %--- Initialize ephemeris structure  --------------------------------------
-% This is in order to make sure variable 'eph' for each SV has a similar
-% structure when only one or even none of the three requisite messages
-% is decoded for a given PRN.
+% Initialize ephemeris fields before decoding the available navigation pages.
 eph = eph_structure_init();
 
 % Preamble search can be delayed to a later point in the tracking results
@@ -62,7 +52,7 @@ TOW = inf;
 %Creates a cyclic redundancy code (CRC) detector System object
 crcDet = comm.CRCDetector([24 23 18 17 14 11 10 7 6 5 4 3 1 0]);
 
-% Convert CNAV-producing convolutional code polynomials to trellis description
+% Rate-1/2, constraint-length-7 Galileo F/NAV convolutional-code trellis.
 % Note that the difference from GPS is that the second branch G2 is
 % inverted at the end (see ICD)
 trellis = poly2trellis(7,[171 133]);
@@ -79,8 +69,8 @@ secondCode = [-1 1 1 1   1 -1 1 1   1 1 -1 1   -1 -1 -1 1   -1 1 1 -1];
 preamble_bits = [-1 1 -1 -1 1 -1 -1 -1 1 1 1 1];
 sync_bits = preamble_bits <0;
 
-% "Upsample" the preamble - make 25 values per one bit. The preamble must be
-% found with precision of a sample.
+% Expand each preamble symbol by the 20-chip secondary code to search
+% at the 1 ms tracking-epoch resolution.
 preamble_ms = kron(preamble_bits, secondCode);
 
 % Use the prompt correlator as the symbol stream, skip start of record if
@@ -107,8 +97,7 @@ for ind = 1:numel(index) % For each occurrence
     % Check distance to all other possible sync patterns for current start
     index2 = index - index(ind);
     
-    % Check spacing, need two 250 symbol pages (even and odd) and at least
-    % one subframe (2500 nav bits)
+    % Require another page 10 s later and at least five 500-symbol F/NAV pages.
     if (~isempty(find(index2 == 500*20,1))) && ...
             ( length(bits(index(ind):end))> 2500*20 )
         
@@ -162,5 +151,5 @@ for ind = 1:numel(index) % For each occurrence
             break
         end % if CRC is OK ...
         
-    end % Check spacing, need two 250 symbol pages (even and odd)
+    end % Page spacing and available-data checks
 end % for ind = 1:size(index)

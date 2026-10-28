@@ -1,20 +1,20 @@
-function L1CData = generateDataBOC11(settings,PRN)
+function L1CData = generateDataBOC11(PRN)
 % Generate the GPS L1C data-channel BOC(1,1) primary code in bipolar
 % format (-1, +1). PRNs 1 to 63 are supported.
 %
-% L1CData = generateDataBOC11(settings,PRN)
+% L1CData = generateDataBOC11(PRN)
 %
 %   Inputs:
 %       PRN       - Satellite PRN number.
 %
 %   Outputs:
 %       L1CData   - L1C data-channel code after extension insertion and
-%                   BOC(1,1) subcarrier modulation.
+%                   BOC(1,1) modulation, with 12 code-table points per primary
+%                   chip, without tracking guard points.
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR
 % Original authors: Yafeng Li, Nagaraj C. Shivaramaiah and Dennis M. Akos
-% Reference: Adapted within the CU Multi-GNSS SDR receiver framework for GPS L1C.
 %--------------------------------------------------------------------------
 
 % L1C data primary-code table. Column 1 is the Weil phase difference w;
@@ -45,14 +45,14 @@ end
 
 % Convert {-1,+1} to {0,1} so xor can be used for Weil-code generation.
 legendre(legendre==-1) = 0;
-Primary  = zeros(1,10223);
+Primary  = zeros(1,N);
 
 % Read the PRN-specific phase difference and insertion point.
 p = wp_data(PRN,2);
 w = wp_data(PRN,1);
 
 % Data-channel Weil code: W(n) = L(n) xor L(n+w).
-for ind = 0:10222
+for ind = 0:N-1
     k = ind;
     Primary(ind+1) = xor(legendre(k+1), legendre(mod(k+w,N)+1));
 end
@@ -72,3 +72,5 @@ for ii = 1:2:length(L1CData)-1
     L1CData(ii+1) = -L1CWithExtension(jj);
     jj = jj + 1;
 end
+% Expand BOC(1,1) from 2 to 12 points per primary chip to match TMBOC.
+L1CData = repelem(L1CData, 6);

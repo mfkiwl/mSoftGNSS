@@ -7,6 +7,7 @@ function DataCodesTable = makeDataTable(settings,PRN)
 %
 %   Inputs:
 %       settings        - receiver settings
+%       PRN             - satellite PRN number
 %   Outputs:
 %       DataCodesTable  - sampled GPS L1C data BOC(1,1) spreading waveform
 %                         
@@ -18,8 +19,6 @@ function DataCodesTable = makeDataTable(settings,PRN)
 % Based on the original SoftGNSS SDR framework by Darius Plausinaitis,
 % Peter Rinder, Nicolaj Bertelsen and Dennis M. Akos
 
-% Reference: Adapted within the CU Multi-GNSS SDR receiver framework for GPS L1C.
-% Signal-specific comments in this file refer to GPS L1C.
 %
 %--------------------------------------------------------------------------
 %This program is free software; you can redistribute it and/or
@@ -44,10 +43,10 @@ samplesPerCode = round(settings.samplingFreq / ...
 
 %--- Find time constants --------------------------------------------------
 ts = 1/settings.samplingFreq;           % Sampling period in sec
-tc = 1/settings.codeFreqBasis/2;        % L1C data BOC(1,1) chip period in sec
+tc = 1/settings.codeFreqBasis/12;       % 12-point local-code grid interval in sec
 
 %--- Generate L1C data BOC(1,1) code for given PRN -----------------------------
-DataCode= generateDataBOC11(settings,PRN);
+DataCode= generateDataBOC11(PRN);
 
 %=== Digitizing ===========================================================
 
@@ -56,7 +55,7 @@ DataCode= generateDataBOC11(settings,PRN);
 codeValueIndex = ceil((ts * (1:samplesPerCode)) / tc);
 
 %--- Correct the last index (due to number rounding issues) ---------------
-codeValueIndex(end) = settings.codeLength*2;
+codeValueIndex(end) = settings.codeLength*12;
 codeValueIndex(1) = 1;
 
 %--- Make the digitized version of the L1C code ---------------------------

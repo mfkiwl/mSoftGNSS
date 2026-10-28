@@ -45,9 +45,9 @@ function [trackResults, channel]= trkChannelsSerial(fid, channel, settings)
 %% Initialize result structure ============================================
 
 % Channel status
-trackResults.status         = '-';      % No tracked signal, or lost lock
+trackResults.status         = '-';      % No tracked signal
 
-% The absolute sample in the record of the E1B code start:
+% The absolute sample in the record of the E5bI code start:
 trackResults.absoluteSample = zeros(1, settings.msToProcess);
 
 % Freq of the PRN code:
@@ -109,8 +109,12 @@ PDIcode = settings.intTime;
     settings.dllDampingRatio, 1.0);
 
 %--- PLL variables --------------------------------------------------------
+% Summation interval
+PDIcarr = settings.intTime;
+
 % Calculate filter coefficient values
-[pf3,pf2,pf1] = calcLoopCoefCarr(settings);
+[tau1carr, tau2carr] = calcLoopCoef(settings.pllNoiseBandwidth, ...
+                                    settings.pllDampingRatio, 1.0);
 
 % -------- Number of acquired signals ------------------------------------
 % Number of acquired signals
@@ -181,7 +185,7 @@ for channelNr = 1:settings.numberOfChannels
                 channel(channelNr).codePhase-1), 'bof');
         end
         
-        % Get a vector with the E5bI tiered code sampled 1x/chip
+        % Get a vector with the E5bI primary code sampled 1x/chip
         E5bICode = generateE5bIcode(channel(channelNr).PRN,1);
         % Then make it possible to do early and late versions
         E5bICode = [E5bICode(settings.codeLength) E5bICode E5bICode(1)];  %#ok<AGROW>
@@ -194,8 +198,8 @@ for channelNr = 1:settings.numberOfChannels
             % SIMD serial correlator expects an int32 local code table.
             E5bCodeTable = int32(E5bCodeTable);
         elseif settings.correlatorType == 2
-            % GPU serial correlator expects an int8 local code table.
-            E5bCodeTable = int8(E5bCodeTable);
+            % GPU serial correlator expects a single local code table.
+            E5bCodeTable = single(E5bCodeTable);
         end
         
         %--- Perform various initializations ------------------------------
@@ -214,8 +218,8 @@ for channelNr = 1:settings.numberOfChannels
         oldCodeError = 0.0;
         
         % Carrier/Costas loop parameters
-        d2CarrError  = 0.0;
-        dCarrError   = 0.0;
+        oldCarrNco   = 0.0;
+        oldCarrError = 0.0;
         
         % For C/No computation
         CNoValue = zeros(1,3);
@@ -325,7 +329,7 @@ for channelNr = 1:settings.numberOfChannels
                 % phase pi/2 back to the E5bI phase.
                 QI = (pilot_I_P + 1i * pilot_Q_P) * exp(-1i * pi/2);
                 
-                % atan is not affectede by the NH code modulation
+                % The Costas discriminator is insensitive to secondary-code polarity.
                 carrErrorQ = atan(imag(QI)/real(QI)) / (2.0 * pi);
                 
                 % As the data and pilot power is the same, so a simple 
@@ -334,9 +338,10 @@ for channelNr = 1:settings.numberOfChannels
             end
             
             % Implement carrier loop filter and generate NCO command
-            d2CarrError = d2CarrError + carrError * pf3;
-            dCarrError  = d2CarrError + carrError * pf2 + dCarrError;
-            carrNco     = dCarrError + carrError * pf1;
+            carrNco = oldCarrNco + (tau2carr/tau1carr) * ...
+                (carrError - oldCarrError) + carrError * (PDIcarr/tau1carr);
+            oldCarrNco   = carrNco;
+            oldCarrError = carrError;
             
             % Save carrier frequency for current correlation
             trackResults(channelNr).carrFreq(loopCnt) = carrFreq;
@@ -413,9 +418,7 @@ for channelNr = 1:settings.numberOfChannels
             
         end % for loopCnt
         
-        % If we got so far, this means that the tracking was successful
-        % Now we only copy status, but it can be update by a lock detector
-        % if implemented
+        % Copy channel status; no lock-detector decision is made here.
         trackResults(channelNr).status  = channel(channelNr).status;
         
     end % if a PRN is assigned

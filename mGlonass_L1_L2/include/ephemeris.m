@@ -1,21 +1,15 @@
 function [eph, TOD] = ephemeris(navBiBinaryBitsSamples)
-%Function decodes ephemerides and TOD from the given bit stream. The stream
-%(array) in the parameter BITS must contain 1275 bits. The first element in
-%the array must be the first bit of a string. The string ID of the
-%first string in the array is not important.
+%Decode GLONASS FDMA navigation strings and satellite ephemerides.
+%The input contains 15 successive 1.7 s data sections, with time marks
+%removed. Bi-binary and relative coding are removed before field decoding.
 %
-%
-%[eph, TOD] = ephemeris(bits)
+%[eph, TOD] = ephemeris(navBiBinaryBitsSamples)
 %
 %   Inputs:
-%       bits        - bits of the navigation messages (15 strings).
-%                   Type is character array and it must contain only
-%                   characters '0' or '1'.
+%       navBiBinaryBitsSamples - 25500 prompt I values at 1 ms intervals.
 %   Outputs:
-%       TOD         - Time Of Day (TOD) of the first string in the bit
-%                   stream (in seconds)
-%       eph         - SV ephemeris
-%
+%       TOD         - GLONASS time of day, in seconds.
+%       eph         - decoded satellite ephemeris.
 %--------------------------------------------------------------------------
 %                           CU Multi-GNSS SDR  
 %

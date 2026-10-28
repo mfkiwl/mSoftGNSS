@@ -4,14 +4,12 @@ function [eph, SOW] = ephemeris(bits, PRN)
 %bits (fifty pages). The first element in the array must be the first bit of
 %a subframe or page. The first supplied subframe/page ID is not important.
 %
-%Function does not check parity!
+%BCH decoding is applied to the navigation words.
 %
 %[eph, SOW] = ephemeris(bits, PRN)
 %
 %   Inputs:
-%       bits        - bits of the navigation messages.
-%                   Type is character array and it must contain only
-%                   characters '0' or '1'.
+%       bits        - navigation-message bits as a numeric 0/1 vector.
 %       PRN         - PRN number to separate the decoding process.
 %                   GEO & MEO/IGSO have different message structure.
 %
@@ -61,7 +59,7 @@ end
 
 %% Check if the parameters are strings ====================================
 
-% Pi used in the GPS coordinate system
+% Pi specified for the BDS broadcast-ephemeris calculations
 BeidouPi = 3.1415926535898;
 % Preamble for Beidou
 preamble = [1 1 1 0 0 0 1 0 0 1 0];
@@ -86,10 +84,9 @@ end
 %% Ephemeris for GEO ======================================================
 if ((1 <= PRN) && (PRN <=5 )) || ((59 <= PRN) && (PRN <= 63))
     
-    % GEO has 10 words in subframe 1. Each word has 150 navigation bits
-    % i.e., 300 raw bits (300 ms)
+    % D2 subframe 1 spans ten pages; each page has 300 bits over 0.6 s.
     
-    % BCH decoding & interleaving should be apllied!!!
+    % Deinterleave navigation words before BCH decoding.
     
     % Keep every ten-page D2 cycle separate. The cycle index is based on
     % cycleKey = i-Pnum1, with an offset that makes it a MATLAB index.
@@ -324,7 +321,7 @@ elseif (6 <= PRN) && (PRN <= 58)
         subframe = DeSubframe;
         
         %--- Decode the sub-frame id ------------------------------------------
-        % For more details on sub-frame contents please refer to GPS IS.
+        % For subframe field definitions, refer to the BDS open-service ICD.
         %--- Decode the sub-frame id ------------------------------------------
         [decoded,cnumerr] = bchdec( gf(subframe(16:30),1),15,11 );
         if cnumerr ~= -1

@@ -22,7 +22,7 @@ function [pseudoranges,transmitTime,localTime,carrFreqPerSat] = ...
 %       TOW             - Time Of Week (TOW) of the first sub-frame in the bit
 %                       stream (in seconds)
 %       currMeasSample  - current measurement sample location(measurement time)
-%       localTime       - local time(in GPST) at measurement time
+%       localTime       - receiver local time at the measurement epoch [s]
 %       channelList     - list of channels to be processed
 %       settings        - receiver settings
 %
@@ -31,7 +31,7 @@ function [pseudoranges,transmitTime,localTime,carrFreqPerSat] = ...
 
 %       transmitTime    - transmitting time of channels to be processed
 %                         corresponding to measurement time
-%       localTime       - local time(in GPST) at measurement time
+%       localTime       - receiver local time at the measurement epoch [s]
 
 %--------------------------------------------------------------------------
 %--------------------------------------------------------------------------

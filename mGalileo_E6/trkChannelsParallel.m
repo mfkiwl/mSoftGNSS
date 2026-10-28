@@ -45,7 +45,7 @@ function [trackResults, channel]= trkChannelsParallel(fid, channel, settings)
 
 %% Initialize result structure ====================================
 % Channel status
-trackResults.status         = '-';      % No tracked signal, or lost lock
+trackResults.status         = '-';      % No tracked signal
 
 % The absolute sample in the record of the E6 code start:
 trackResults.absoluteSample = zeros(1, settings.msToProcess);
@@ -120,11 +120,11 @@ absoluteSample = settings.skipNumberOfSamples + ...
 
 % Generate the E6 code table for acquired signals
 for channelNr = 1:channelCnt
-    % Get a vector with the E5b data code sampled 1x/chip
+    % Get a vector with the E6B primary code sampled 1x/chip
     E6bCode = generateE6Bcode(channel(channelNr).PRN);
     % Then make it possible to do early and late versions
     E6bCodeTable(channelNr,:)  = [E6bCode(end) E6bCode E6bCode(1)]; %#ok<AGROW>
-    % Get a vector with the E5b pilot code sampled 1x/chip
+    % Get a vector with the E6C primary code sampled 1x/chip
     E6cCode = generateE6Ccode(channel(channelNr).PRN,1);
     % Then make it possible to do early and late versions
     E6cCodeTable(channelNr,:)  = [E6cCode(end) E6cCode E6cCode(1)]; %#ok<AGROW>
@@ -134,8 +134,8 @@ if settings.correlatorType == 1
     % SIMD backend expects one int32 code table shared by all active channels.
     E6CodeTable = int32(E6CodeTable');
 elseif settings.correlatorType == 2
-    % GPU backend expects one int8 code table shared by all active channels.
-    E6CodeTable = int8(E6CodeTable');
+    % GPU backend expects one single code table shared by all active channels.
+    E6CodeTable = single(E6CodeTable');
 end
 
 %% Initialize tracking variables ==================================
@@ -338,11 +338,9 @@ for loopCnt =  1:codePeriods
         % Combined code tracking error estimation using data and pilot
         % chaannel signals
         if (settings.pilotTRKflag == 1)
-            % E6 pilot channel carrier phase is pi/2 rad ahead of the
-            % data channel carrier phase. Here we rotate the pilot
-            % channel phase pi/2 back to the data channel phase.
+            % Use the E6C prompt I/Q values for the pilot discriminator.
             QI = (pilot_I_P + 1i * pilot_Q_P) ;
-            % atan is not affectede by the NH code modulation
+            % The Costas discriminator is insensitive to secondary-code polarity.
             carrErrorQ = atan(imag(QI)/real(QI)) / (2.0 * pi);
             % As the data and pilot power is the same, so a simple
             % avergae is used as the carrier phase error estimate

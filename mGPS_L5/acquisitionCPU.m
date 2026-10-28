@@ -87,7 +87,7 @@ numberOfFreqBins = round(settings.acqSearchBand * 2 / settings.acqSearchStep) + 
 acqResults.carrFreq     = zeros(1, 32);
 % Code frequencies of detected signals
 acqResults.codeFreq     = zeros(1, 32);
-% L5c code phases of detected signals
+% L5 code phases of detected signals
 acqResults.codePhase    = zeros(1, 32);
 % Correlation peak ratios of the detected signals
 acqResults.peakMetric   = zeros(1, 32);
@@ -170,7 +170,7 @@ for PRN = settings.acqSatelliteList
     secondPeak = max(results(codePhaseRange));
     % Save code phase acquisition result
     acqResults.codePhase(PRN) = codePhaseMax;
-    % Store GLRT statistic
+    % Store the primary-to-secondary correlation-peak ratio.
     acqResults.peakMetric(PRN) = peakMax/secondPeak;
     
     % If the result is above threshold, then there is a signal ...

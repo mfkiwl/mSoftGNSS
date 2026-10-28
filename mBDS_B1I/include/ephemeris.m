@@ -1,17 +1,12 @@
 function [eph, SOW] = ephemeris(bits, PRN)
-%Function decodes ephemerides and SOW from the given bit stream. The stream
-%(array) in the parameter BITS must contain 1500 bits. The first element in
-%the array must be the first bit of a subframe. The subframe ID of the
-%first subframe in the array is not important.
-%
-%Function does not check parity!
+%Decode BDS D1/D2 ephemerides and SOW, including BCH decoding.
+%The input starts at a subframe boundary and contains 1500 D1 bits or
+%15000 D2 bits, corresponding to 30 seconds of navigation data.
 %
 %[eph, SOW] = ephemeris(bits, PRN)
 %
 %   Inputs:
-%       bits        - bits of the navigation messages.
-%                   Type is character array and it must contain only
-%                   characters '0' or '1'.
+%       bits        - navigation-message bits as a numeric 0/1 vector.
 %       PRN         - PRN number to separate the decoding process.
 %                   GEO & MEO/IGSO have different message structure.
 %
@@ -64,7 +59,7 @@ end
 
 %% Check if the parameters are strings ====================================
 
-% Pi used in the GPS coordinate system
+% Pi specified for the BDS broadcast-ephemeris calculations
 BeidouPi = 3.1415926535898;
 % Preamble for Beidou
 preamble = [1 1 1 0 0 0 1 0 0 1 0];
@@ -89,10 +84,9 @@ end
 %% Ephemeris for GEO ======================================================
 if (1 <= PRN) && (PRN <=5 ) || (PRN >= 59 && PRN <= 63)
     
-    % GEO has 10 words in subframe 1. Each word has 150 navigation bits
-    % i.e., 300 raw bits (300 ms)
+    % D2 subframe 1 spans ten pages; each page has 300 bits over 0.6 s.
     
-    % BCH decoding & interleaving should be apllied!!!
+    % Deinterleave navigation words before BCH decoding.
     
     a1_msb       = []; a1_lsb =[];
     C_uc_msb     = []; C_uc_lsb = [];
@@ -282,7 +276,7 @@ elseif (PRN >= 6) && (PRN <= 58)
     % Decode all 5 sub-frames =============================================
     D1_valid = inf(1,3);
     
-    % BCH decoding & interleaving should be apllied!!!
+    % Deinterleave navigation words before BCH decoding.
     t_oe_msb = [];
     t_oe_lsb = [];
     
@@ -303,7 +297,7 @@ elseif (PRN >= 6) && (PRN <= 58)
         subframe = DeSubframe;
         
         %--- Decode the sub-frame id ------------------------------------------
-        % For more details on sub-frame contents please refer to GPS IS.
+        % For subframe field definitions, refer to the BDS open-service ICD.
         %--- Decode the sub-frame id ------------------------------------------
         [decoded,cnumerr] = bchdec( gf(subframe(16:30),1),15,11 );
         if cnumerr ~= -1

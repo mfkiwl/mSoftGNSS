@@ -4,14 +4,11 @@ function eph = eph_structure_init()
 %                         CU Multi-GNSS SDR  
 %--------------------------------------------------------------------------
 
-% Initialize with NaN (Not a Number) or 0 to allow matrix operations
-% and prevent "dimension mismatch" errors in satpos.m
-
 %--- SVID , Clock correction, SISA, Ionospheric correction ----------------
 eph.SVID      = NaN;      % 6 bits
 eph.IODnav1   = NaN;      % 10 bits
 eph.t_oc      = NaN;      % 14 bits in s
-eph.a_f0      = 0;        % 31 bit in s (Initialize to 0 to prevent crash)
+eph.a_f0      = 0;        % 31 bit in s
 eph.a_f1      = 0;        % 21 bit in s/s
 eph.a_f2      = 0;        % 6 bit in s/(s^2)
 eph.a_i0      = 0;        % 11 bit

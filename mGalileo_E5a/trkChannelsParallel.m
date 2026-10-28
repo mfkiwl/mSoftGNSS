@@ -45,7 +45,7 @@ function [trackResults, channel]= trkChannelsParallel(fid, channel, settings)
 
 %% Initialize result structure ====================================
 % Channel status
-trackResults.status         = '-';      % No tracked signal, or lost lock
+trackResults.status         = '-';      % No tracked signal
 % The absolute sample in the record of the E5a code start:
 trackResults.absoluteSample = zeros(1, settings.msToProcess);
 % Freq of the PRN code:
@@ -128,8 +128,8 @@ if settings.correlatorType == 1
     % SIMD backend expects one int32 code table shared by all active channels.
     E5aCodeTable = int32(E5aCodeTable');
 elseif settings.correlatorType == 2
-    % GPU backend expects one int8 code table shared by all active channels.
-    E5aCodeTable = int8(E5aCodeTable');
+    % GPU backend expects one single code table shared by all active channels.
+    E5aCodeTable = single(E5aCodeTable');
 end
 
 %% Initialize tracking variables ==================================
@@ -334,7 +334,7 @@ for loopCnt =  1:codePeriods
             % data channel carrier phase. Here we rotate the pilot
             % channel phase pi/2 back to the data channel phase.
             QI = (pilot_I_P + 1i * pilot_Q_P) * exp(-1i * pi/2);
-            % atan is not affectede by the NH code modulation
+            % The Costas discriminator is insensitive to secondary-code polarity.
             carrErrorQ = atan(imag(QI)/real(QI)) / (2.0 * pi);
             % As the data and pilot power is the same, so a simple
             % avergae is used as the carrier phase error estimate

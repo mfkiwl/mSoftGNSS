@@ -133,7 +133,7 @@ else
 end
 
 % Primary B1C code length in chips. The local code table below is expanded
-% to the 12-sample-per-chip grid used by the QMBOC correlator.
+% to the 12-point-per-primary-chip grid used by the QMBOC correlator.
 codeLength = settings.codeLength;
 % Early-late spacing in primary-code chips, used by the DLL discriminator.
 earlyLateSpc = settings.dllCorrelatorSpacing;
@@ -145,17 +145,18 @@ settings.dllCorrelatorSpacing = settings.dllCorrelatorSpacing*12;
 for channelNr = 1:channelCnt
     % Data-channel BOC(1,1) spreading waveform on the 12x local-code grid.
     B1CData = generateDataBOC11(settings,channel(channelNr).PRN);
-    B1CDataTable(channelNr,:) = [B1CData(codeLength*12) B1CData B1CData(1)]; %#ok<AGROW>
+    % Add 12 guard code-table points at each end of every code branch.
+    B1CDataTable(channelNr,:) = [B1CData(end-11:end) B1CData B1CData(1:12)]; %#ok<AGROW>
 
     % Pilot BOC(1,1) spreading waveform.
     pilotBOC11 = generatePilotBOC11(settings,channel(channelNr).PRN);
-    pilotBOC11Table(channelNr,:) = [pilotBOC11(codeLength*12) pilotBOC11 ...
-        pilotBOC11(1)]; %#ok<AGROW>
+    pilotBOC11Table(channelNr,:) = [pilotBOC11(end-11:end) pilotBOC11 ...
+        pilotBOC11(1:12)]; %#ok<AGROW>
 
     % Pilot BOC(6,1) spreading waveform for full-band QMBOC tracking.
     pilotBOC61 = generatePilotBOC61(settings,channel(channelNr).PRN);
-    pilotBOC61Table(channelNr,:) = [pilotBOC61(codeLength*12) pilotBOC61 ...
-        pilotBOC61(1)]; %#ok<AGROW>
+    pilotBOC61Table(channelNr,:) = [pilotBOC61(end-11:end) pilotBOC61 ...
+        pilotBOC61(1:12)]; %#ok<AGROW>
 end
 % Data and pilot branches are stored in the shared QMBOC table layout for
 % all active channels.
@@ -303,23 +304,23 @@ for loopCnt =  1:NumToProcess
     % Start index of each channel block within the current rawSignal buffer.
     startIdx = absoluteSample - blkStartIdx + 1;
 
+    % Convert phases to the 12x grid; offset only the correlator input by
+    % 11 points for the additional leading guard points.
     if settings.correlatorType == 0 % Using MATLAB correlator
-        % remCodePhase and codePhaseStep are converted from primary chips to
-        % the 12x local-code grid before correlation.
         correValues = corrMatlabParallelB1C(settings,rawSignal,B1CCodeTable, ...
-            remCarrPhase,carrPhaseStep,remCodePhase*12,codePhaseStep*12,...
+            remCarrPhase,carrPhaseStep,remCodePhase*12+11,codePhaseStep*12,...
             startIdx,chSampSize,isDataRead);
     elseif settings.correlatorType == 1 % Using SIMD of CPU
         % Use the CPU SIMD backend selected for the running MATLAB architecture.
         % Uses the same QMBOC interface and 12x code phase units.
         correValues = simdCorrelator(settings,rawSignal,B1CCodeTable, ...
-            remCarrPhase,carrPhaseStep,remCodePhase*12,codePhaseStep*12,...
+            remCarrPhase,carrPhaseStep,remCodePhase*12+11,codePhaseStep*12,...
             int32(startIdx),int32(chSampSize),isDataRead);
     elseif settings.correlatorType == 2 % Using GPU
         % Compile with: mexcuda corrGPUParallelQMBOC.cu
         % Uses the same QMBOC interface and 12x code phase units.
         correValues = corrGPUParallelQMBOC(settings,rawSignal,B1CCodeTable, ...
-            remCarrPhase,carrPhaseStep,remCodePhase*12,codePhaseStep*12,...
+            remCarrPhase,carrPhaseStep,remCodePhase*12+11,codePhaseStep*12,...
             int32(startIdx),int32(chSampSize),isDataRead);
     end
 

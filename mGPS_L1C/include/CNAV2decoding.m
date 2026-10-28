@@ -1,9 +1,22 @@
 function [eph, firstSubFrame,TOW] = CNAV2decoding(trackResults,channelNr,settings)
 %CNAV2DECODING Decode GPS L1C CNAV-2 navigation data.
 %   Uses pilot overlay-code correlation for frame synchronization and
-%   decodes the CNAV-2 LDPC subframes with Min-Sum using the receiver's
-%   existing H2/H3 parity-check matrices. CRC-24Q is checked before
+%   decodes the CNAV-2 LDPC subframes with Min-Sum and the H2/H3
+%   parity-check matrices. CRC-24Q is checked before
 %   ephemeris decoding.
+%
+%[eph, firstSubFrame, TOW] = CNAV2decoding(trackResults, channelNr, settings)
+%
+%   Inputs:
+%       trackResults  - Tracking results with data and pilot prompt I/Q.
+%       channelNr     - Index of the tracking channel to decode.
+%       settings      - Receiver settings and LDPC decoder options.
+%   Outputs:
+%       eph           - Decoded CNAV-2 ephemeris and auxiliary parameters.
+%       firstSubFrame - One-based start epoch of the first accepted frame
+%                       in the 10 ms tracking stream; inf if unavailable.
+%       TOW           - GPS seconds of week at that frame's start;
+%                       inf if no ephemeris is accepted.
 
 %--- Initialize ephemeris structure --------------------------------------
 eph = eph_structure_init();
@@ -11,6 +24,7 @@ firstSubFrame = inf;
 TOW = inf;
 
 %% Frame sync using pilot channel overlay code ============================
+% Joint tracking uses pilot I; data-only loop tracking uses pilot Q.
 if isfield(settings, 'pilotTRKflag') && settings.pilotTRKflag == 1 && ...
         isfield(trackResults, 'Pilot_I_P')
     syncSoft = trackResults(channelNr).Pilot_I_P;
@@ -150,12 +164,14 @@ end
 end
 
 function deinterleaved = cnav2Deinterleave(interleaved)
+% Deinterleave the 1748 encoded symbols of CNAV-2 Subframes 2 and 3.
 matDeint = reshape(interleaved, 38, 46).';
 deinterleaved = matDeint(:).';
 end
 
 function [decodedCodeword, realIter, hasError] = ...
     cnav2DecodeLdpc(softI, softQ, hMatrix, ldpcSettings)
+% Form LLRs, run Min-Sum decoding, and check the parity-check syndrome.
 [normIp, normSigma2] = noiseEst(softI(:), softQ(:));
 
 % In this receiver's CNAV-2 prompt stream, positive prompt-I samples map to
@@ -169,6 +185,7 @@ hasError = any(mod(sparse(logical(hMatrix)) * decodedCodeword, 2));
 end
 
 function ldpcSettings = cnav2LdpcSettings(settings, messageType)
+% Select the CNAV-2 subframe dimensions and Min-Sum decoder parameters.
 ldpcSettings.messageType = messageType;
 ldpcSettings.maxIterations = getOptionalSetting(settings, ...
     'ldpcMaxIterations', getOptionalSetting(settings, 'maxIterations', 50));
@@ -188,6 +205,7 @@ end
 end
 
 function value = getOptionalSetting(settings, fieldName, defaultValue)
+% Read an optional decoder setting or use its default value.
 if isstruct(settings) && isfield(settings, fieldName)
     value = settings.(fieldName);
 else

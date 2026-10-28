@@ -10,8 +10,8 @@ function [CNo, PllDetector]= Calc_CNo_PLD(trackResults,settings,loopCnt)
 %       loopCnt           - Iteration index for C/No calculation
 %   Outputs:
 %       CNo               - Estimated C/No for the given values of I and Q
-%                           CNo(1) is for data channel,CNo(21) is for pilot
-%                           channel, and CNo(2) is for the whole E1 signal  
+%                           CNo(1) is for the data channel, CNo(2) for the
+%                           pilot channel, and CNo(3) for the whole E1 signal.
 %       PllDetector       - PLL lock detector output for data and pilot
 %                            channels
 %
@@ -22,8 +22,6 @@ function [CNo, PllDetector]= Calc_CNo_PLD(trackResults,settings,loopCnt)
 % Based on the original framework for GPS C/A SDR by Darius Plausinaitis,
 % Peter Rinder, Nicolaj Bertelsen and Dennis M. Akos
 
-% Reference: Adapted within the CU Multi-GNSS SDR receiver framework for Galileo E1.
-% Signal-specific comments in this file refer to Galileo E1.
 %
 %--------------------------------------------------------------------------
 %This program is free software; you can redistribute it and/or
@@ -98,7 +96,7 @@ if (settings.pilotTRKflag == 1) || (settings.pilotTRKflag == 2)
     Pav = sqrt(Zm^2 - Zv);
     % Calculate the variance of the noise
     Nv = 0.5 * (Zm - Pav);
-    %  C/No estimation for data channel
+    %  C/No estimation for pilot channel
     PilotCNo = abs((1/T) * Pav / (2 * Nv));
     CNo(2) = 10*log10(PilotCNo);
     

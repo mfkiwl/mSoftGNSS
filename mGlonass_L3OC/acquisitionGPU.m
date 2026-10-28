@@ -4,7 +4,7 @@
 %"acqSatelliteList" in the settings structure. Function saves code phase
 %and frequency of the detected signals in the "acqResults" structure.
 %
-%acqResults = GPU_acquisition(fid,settings)
+%acqResults = acquisitionGPU(fid,settings)
 %
 %   Inputs:
 %       fid             - file identifier of the signal record.

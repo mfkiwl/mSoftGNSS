@@ -1,16 +1,16 @@
 function E5aQ_secondary = generateE5aQ_secondary(PRN)
 % This function generates the Galileo E5a-Q secondary code in bipolar format (-1, +1)
 % PRNs 1 to 50 (no care is taken if PRN number is > 50)
-% The memory codes are stored in the file gale1bcode.dat
+% The 100-chip secondary codes are stored below in hexadecimal form.
 %
-% E1Bcode = generateE1Bcode(PRN)
+% E5aQ_secondary = generateE5aQ_secondary(PRN)
 %
 %   Inputs:
 %       PRN             - PRN number of the sequence.
 %
 %   Outputs:
-%       E5bQ_secondary  - a vector containing the desired E5BQ secondary 
-%                          code sequence(chips).
+%       E5aQ_secondary  - a vector containing the E5aQ secondary code
+%                         sequence (100 chips).
 %                         
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  

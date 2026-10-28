@@ -1,17 +1,14 @@
 function E6CCodesTable = makeE6CTable(PRN,settings)
-%Function generates E6C codes for the specified PRN based on the settings
-%provided in the structure "settings". The codes are digitized at the
-%sampling frequency specified in the settings structure.
-%One row in the "E6CCodesTable" is one E6C code. The row number is the PRN
-%number of the E6C code.
+%Sample the first primary-code period of the E6C tiered code.
+%The sampling frequency is specified in settings.samplingFreq.
 %
-%E6CCodesTable = makeE6CTable(settings, PRN)
+%E6CCodesTable = makeE6CTable(PRN,settings)
 %
 %   Inputs:
 %       settings        - receiver settings
+%       PRN             - PRN number of the sequence
 %   Outputs:
-%       E6CCodesTable   - an array of arrays (matrix) containing E6C codes
-%                       for all satellite PRNs
+%       E6CCodesTable   - row vector of code samples for the specified PRN
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  
@@ -43,14 +40,14 @@ samplesPerCode = round(settings.samplingFreq / ...
 ts = 1/settings.samplingFreq;   % Sampling period in sec
 tc = 1/settings.codeFreqBasis;  % E6C chip period in sec
 
-%--- Generate E6C primary code for given PRN -----------------------------------
+%--- Generate E6C tiered code for the given PRN -------------------------------
 E6CCode = generateE6Ccode(PRN,2);
 
 %=== Digitizing =======================================================
 
 %--- Make index array to read E6C code values -------------------------
 % The length of the index array depends on the sampling frequency -
-% number of samples per millisecond (because one E6C code period is one
+% number of samples per millisecond (because one E6C primary-code period is one
 % millisecond).
 codeValueIndex = ceil((ts * (1:samplesPerCode)) / tc);
 

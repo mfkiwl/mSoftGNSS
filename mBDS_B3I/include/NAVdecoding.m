@@ -90,7 +90,7 @@ if ((1 <= PRN) && (PRN <=5 )) || ((59 <= PRN) && (PRN <= 63))
     tlmXcorrResult = xcorr(bits, preamble_D2);
     codrPerD = 2;
 elseif (6 <= PRN) && (PRN <= 58)
-    % MEO/IGSO satellites. Not modulated with NM code.
+    % MEO/IGSO satellites use the 20-chip NH overlay.
     % Correlate tracking output with the preamble
     tlmXcorrResult = xcorr(bits, preamble_D1);
     codrPerD = 20;
@@ -110,27 +110,16 @@ index = find(...
 % Analyze detected preamble-like patterns ================================
 for i = 1:length(index) % For each occurrence
     
-    %--- Find distances in time between this occurrence and the rest of
-    %preambles like patterns. If the distance is 6000 milliseconds (one
-    %subframe), the do further verifications by validating the parities
-    %of two GPS words
+    % Verify the 300-bit subframe/page interval: 6 s for D1, 0.6 s for D2.
     
     index2 = index - index(i);
     
     if (~isempty(find(index2 == 300*codrPerD, 1)))
         
-        %=== Re-read bit values for preamble verification ==============
-        % Preamble occurrence is verified by checking the parity of
-        % the first two words in the subframe. Now it is assumed that
-        % bit boundaries a known. Therefore the bit values over 20ms are
-        % combined to increase receiver performance for noisy signals.
-        % in Total 62 bits mast be read :
-        % 2 bits from previous subframe are needed for parity checking;
-        % 60 bits for the first two 30bit words (TLM and HOW words).
-        % The index is pointing at the start of TLM word.
+        % Sum each navigation bit and check the BCH codeword in word 1.
         bits = I_P_InputBits(index(i): index(i) + 30 * codrPerD -1)';
         
-        %--- Combine the 20 values of each bit ------------------------
+        %--- Sum the tracking values within each navigation bit -------
         bits = reshape(bits, codrPerD, (size(bits, 1) / codrPerD));
         bits = sum(bits);
         
@@ -145,7 +134,7 @@ for i = 1:length(index) % For each occurrence
         % Decode the received signal in code using an [15,11] BCH decoder
         [~,cnumerr] = bchdec(bits,15,11);
         
-        %--- Check the parity of the TLM and HOW words ----------------
+        %--- Accept a first-word BCH codeword with no errors ---------
         if cnumerr == 0
             % Parity was OK. Record the preamble start position. Skip
             % the rest of preamble pattern checking for this channel

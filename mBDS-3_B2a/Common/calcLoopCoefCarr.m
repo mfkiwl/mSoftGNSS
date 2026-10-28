@@ -1,6 +1,5 @@
 function [pf3,pf2,pf1] = calcLoopCoefCarr(settings)
-%Function finds loop coefficients for 3-order loop. The coefficients are 
-% used then in PLL-s to improve the dynamic performance of carrier tracking.
+%Function finds the third-order carrier PLL coefficients.
 %
 %[pf3,pf2,pf1] = calcLoopCoefCarr(settings)
 %
@@ -31,7 +30,7 @@ function [pf3,pf2,pf1] = calcLoopCoefCarr(settings)
 %USA.
 %--------------------------------------------------------------------------
 
-% Loop noise bandwidth: The 3-order loop remains stable at LBW <= 18Hz.  
+% Loop noise bandwidth.
 LBW = settings.pllNoiseBandwidth;
 
 % Summation interval

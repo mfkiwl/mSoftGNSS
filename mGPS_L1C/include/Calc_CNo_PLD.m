@@ -10,10 +10,11 @@ function [CNo, PllDetector]= Calc_CNo_PLD(trackResults,settings,loopCnt)
 %       loopCnt           - Iteration index for C/No calculation
 %   Outputs:
 %       CNo               - Estimated C/No for the given values of I and Q
-%                           CNo(1) is for data channel,CNo(21) is for pilot
-%                           channel, and CNo(2) is for the whole L1C signal  
+%                           CNo(1) is for data, CNo(2) is for pilot, and
+%                           CNo(3) is for the whole L1C signal [dB-Hz].
+%                           With pilotTRKflag=0: [data, 0, data].
 %       PllDetector       - PLL lock detector output for data and pilot
-%                            channels
+%                           channels; pilot output is 0 when disabled.
 %
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  
@@ -22,8 +23,6 @@ function [CNo, PllDetector]= Calc_CNo_PLD(trackResults,settings,loopCnt)
 % Based on the original SoftGNSS SDR framework by Darius Plausinaitis,
 % Peter Rinder, Nicolaj Bertelsen and Dennis M. Akos
 
-% Reference: Adapted within the CU Multi-GNSS SDR receiver framework for GPS L1C.
-% Signal-specific comments in this file refer to GPS L1C.
 %
 %--------------------------------------------------------------------------
 %This program is free software; you can redistribute it and/or
@@ -66,7 +65,7 @@ DataCNo = abs((1/T) * Pav / (2 * Nv));
 CNo(1) = 10*log10(DataCNo);
 
 % ----------------------- PLL lock detector output -----------------------
-% Narrowbnd power
+% Narrowband power
 NBP = (sum(I_P(I_P>0)) - sum(I_P(I_P<0)))^2 + sum(Q_P)^2;
 NBD = (sum(I_P(I_P>0)) - sum(I_P(I_P<0)))^2 - sum(Q_P)^2;
 % PLL lock detector output
@@ -77,17 +76,10 @@ PllDetector(1) = NBD/NBP;
 % CNo for pilot channel in unit of ratio-Hz
 PilotCNo = 0;
 
-if settings.pilotTRKflag == 2
-    % Pilot-channel prompt correlation values
-    I_P = trackResults.Pilot_I_P(loopCnt - settings.CNoInterval + 1 : loopCnt);
-    Q_P = trackResults.Pilot_Q_P(loopCnt - settings.CNoInterval + 1 : loopCnt);
-elseif settings.pilotTRKflag == 1
-    % Pilot-channel prompt correlation values
+if settings.pilotTRKflag == 1
+    % Pilot Q supplies the in-phase component of the lock detector.
     Q_P = trackResults.Pilot_I_P(loopCnt - settings.CNoInterval + 1 : loopCnt);
     I_P = trackResults.Pilot_Q_P(loopCnt - settings.CNoInterval + 1 : loopCnt);
-end
-
-if (settings.pilotTRKflag == 1) || (settings.pilotTRKflag == 2)    
     % -------------------- C/N0 estimation for pilot channel ---------------
     % Calculate Power
     Z = I_P.^2 + Q_P.^2;
@@ -98,12 +90,12 @@ if (settings.pilotTRKflag == 1) || (settings.pilotTRKflag == 2)
     Pav = sqrt(Zm^2 - Zv);
     % Calculate the variance of the noise
     Nv = 0.5 * (Zm - Pav);
-    %  C/No estimation for data channel
+    %  C/No estimation for pilot channel
     PilotCNo = abs((1/T) * Pav / (2 * Nv));
     CNo(2) = 10*log10(PilotCNo);
     
     % ------------ PLL lock detector output for pilot channel -------------
-    % Narrowbnd power
+    % Narrowband power
     NBP = (sum(I_P(I_P>0)) - sum(I_P(I_P<0)))^2 + sum(Q_P)^2;
     NBD = (sum(I_P(I_P>0)) - sum(I_P(I_P<0)))^2 - sum(Q_P)^2;
     % PLL lock detector output

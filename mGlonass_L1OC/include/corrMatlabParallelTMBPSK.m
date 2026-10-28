@@ -2,16 +2,14 @@ function correValues = corrMatlabParallelTMBPSK(settings, rawSignal, L2CodeTable
     remCarrPhase, carrPhaseStep, remCodePhase, codePhaseStep, ...
     startIdx, chSampSize, isDataRead)
 %CORRMATLABPARALLELTMBPSK MATLAB channel-parallel GLONASS L1OC tracking correlator.
-%   This function keeps the same calling interface as the SIMD / GPU
-%   correlators so it can be used directly in trkChannelsParallel.m when
-%   settings.correlatorType == 0.
+%   Correlate each active channel against a shared IF-data buffer.
 %
 %   Input code-table layout for MATLAB mode:
 %       L1OCCodeTable(channel,:) = [L1OCd code with guard chips, ...
 %                                 L1OCp code with guard chips]
 %   The first half is the repeated L1OCd data branch, and the second half is
 %   the L1OCp pilot branch. Each branch already includes one wraparound chip on
-%   both sides, so ceil(codePhase) + 1 can be used safely for E/P/L indexing.
+%   both sides. E/P/L indexing uses ceil(codePhase) + 1.
 %
 %   Input/output layout follows the SIMD / GPU correlators:
 %       correValues = [I_E; Q_E; I_P; Q_P; I_L; Q_L;
@@ -68,21 +66,21 @@ for channelNr = 1:channelCnt
     sampleIndex = 0:blksize-1;
     codePhase = remCodePhase(channelNr) + codePhaseStep(channelNr) .* sampleIndex;
 
-    % Define index into early CM / L1OCp code vectors.
+    % Define index into early L1OCd/L1OCp code vectors.
     tcode = ceil(codePhase - earlyLateSpc) + 1;
     earlyCode = cmCode(tcode);
     if settings.pilotTRKflag == 1
         earlyCodeCL = clCode(tcode);
     end
 
-    % Define index into late CM / L1OCp code vectors.
+    % Define index into late L1OCd/L1OCp code vectors.
     tcode = ceil(codePhase + earlyLateSpc) + 1;
     lateCode = cmCode(tcode);
     if settings.pilotTRKflag == 1
         lateCodeCL = clCode(tcode);
     end
 
-    % Define index into prompt CM / L1OCp code vectors.
+    % Define index into prompt L1OCd/L1OCp code vectors.
     tcode = ceil(codePhase) + 1;
     promptCode = cmCode(tcode);
     if settings.pilotTRKflag == 1

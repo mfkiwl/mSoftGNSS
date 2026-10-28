@@ -1,15 +1,16 @@
 function PilotCodesTable = makePilotTable(settings,PRN)
-%Function generates GPS L1C TMBOC(6,1,4/33) codes of pilot channel for specified
-%PRN based on the settings provided in the structure "settings". The codes
-%are digitized at the sampling frequency specified in the settings structure.
+%Function samples the BOC(1,1) component of the GPS L1C pilot code for
+%acquisition. BOC(6,1) positions are zero. The code is digitized at the
+%sampling frequency specified in the settings structure.
 %
 %PilotCodesTable = makePilotTable(settings,PRN)
 %
 %   Inputs:
 %       settings         - receiver settings
+%       PRN              - satellite PRN number
 %   Outputs:
-%       PilotCodesTable  - sampled GPS L1C TMBOC(6,1,4/33) spreading waveform
-%                          for pilot channel
+%       PilotCodesTable  - sampled pilot BOC(1,1) component, with the
+%                          BOC(6,1) positions set to zero
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  
@@ -18,8 +19,6 @@ function PilotCodesTable = makePilotTable(settings,PRN)
 % Based on the original SoftGNSS SDR framework by Darius Plausinaitis,
 % Peter Rinder, Nicolaj Bertelsen and Dennis M. Akos
 
-% Reference: Adapted within the CU Multi-GNSS SDR receiver framework for GPS L1C.
-% Signal-specific comments in this file refer to GPS L1C.
 %
 %--------------------------------------------------------------------------
 %This program is free software; you can redistribute it and/or
@@ -47,11 +46,11 @@ samplesPerCode = round(settings.samplingFreq / ...
 
 %--- Find time constants --------------------------------------------------
 ts = 1/settings.samplingFreq;       % Sampling period in sec
-tc = 1/settings.codeFreqBasis/12;    %  L1C TMBOC chip period unit (sec)
+tc = 1/settings.codeFreqBasis/12;    % 12-point local-code grid interval in sec
 
 
-%--- Generate L1C code for given PRN -----------------------------------
-PilotCode = generatePilotTMBOC61(settings,PRN);
+%--- Generate the pilot BOC(1,1) component for acquisition --------------
+PilotCode = generatePilotTMBOC61(settings,PRN,'BOC11');
 
 %=== Digitizing =======================================================
 

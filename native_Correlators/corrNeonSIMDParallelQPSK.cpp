@@ -6,13 +6,12 @@
  * Authors: Yafeng Li (School of Automation, Beijing Information Science and Technology University)
  * Time: Aug, 1, 2026
  *
- * The core processing stages are intentionally organized as:
+ * Processing stages:
  *   1) mixCarrReal() / mixCarrComplex()
  *   2) localCodeGen()
  *   3) correlator()
  *
- * The MEX gateway framework in this file processes all tracking channels
- * for one code period per call, matching trkChannelsParallel.m.
+ * Each call processes one code period for all tracking channels.
  *==============================================================================*/
  
 #include "mex.h"
@@ -102,7 +101,7 @@ static Settings settings;
  *          double codePhaseStep      I   code-table grid increment per IF sample
  *          int    *startIndex        I   one-based logical sample start of each channel in rawSignal
  *          int    *chSampleSize      I   Sample sizes of code periods for all channel
- *          int    isDataRead         I   retained for interface compatibility; unused by NEON
+ *          int    isDataRead         I   IF-buffer refresh flag; unused by NEON
  * Notes  : caCodeTable has size [2 * codeLen, channelCnt], one channel per column.
  *          Code phase, step and spacing are already expressed in the caller's
  *          code-table grid. No signal-specific scaling is applied here.
@@ -125,17 +124,14 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
 	if (!initialized)
 	{
-		/* Validate the MEX interface before dereferencing prhs[k]. Keep this
-		   check in the first-time initialization path so later calls stay on the
-		   existing fast path, but still guarantee the first call is checked before
-		   any input pointers are unpacked. */
+		/* Validate inputs before reading the MATLAB arguments on the first call. */
 		checkInputs(nlhs, nrhs, prhs);
 
 		// Basic setting 
 		settings = parseSettings(prhs[0]);
 
 		/* --------------- Find array dimensions --------------- */
-		// Size of one branch code table ([lastChip code firstChip]).
+		// Number of code-table points in one branch, including guards.
 		codeLen = mxGetM(prhs[2]) / 2;
 		//Channel count
 		channelCnt = mxGetN(prhs[2]);
@@ -353,7 +349,8 @@ void mixCarrReal(const short *rawSignal, double carrPhaseStep, double remCarrPha
         if (settings.rShiftBits != 0) {
             sample = (short)(sample >> settings.rShiftBits);
         }
-		int n = ((int)remCarrPhase) % 16;
+		/* Wrap the truncated phase to 0..15, including negative phases. */
+		int n = ((int)remCarrPhase) & 0x0F;
         iBasebandSignal[0] = (short)(cost[n] * sample);
         qBasebandSignal[0] = (short)(sint[n] * sample);
         remCarrPhase += phaseStep;
@@ -500,7 +497,8 @@ void mixCarrComplex(const short* rawSignal, double carrPhaseStep, double remCarr
 		     Qbb =  Q*cos - I*sin
 		   Here cos/sin denote the quantized integer LUT coefficients. */
 		/* Each complete I/Q expression is converted to short. */
-		int n = ((int)remCarrPhase) % 16;
+		/* Wrap the truncated phase to 0..15, including negative phases. */
+		int n = ((int)remCarrPhase) & 0x0F;
         iBasebandSignal[0] = (short)(cost[n] * sampleI + sint[n] * sampleQ);
         qBasebandSignal[0] = (short)(cost[n] * sampleQ - sint[n] * sampleI);
 		remCarrPhase += phaseStep;
@@ -510,7 +508,7 @@ void mixCarrComplex(const short* rawSignal, double carrPhaseStep, double remCarr
  /* Generate local code ----------------------------------------------------------
  * Generate local code sequences for the QPSK data and pilot branches.
  * Args   : int     *caCode          I   int32 concatenated QPSK code table
- *                                      [dataCode(last,1..N,first), pilotCode(last,1..N,first)]
+ *                                      [guarded dataCode, guarded pilotCode]
  *          size_t codeLen           I   element count of one guarded branch
  *          double remCodePhase      I   initial code phase in code-table grid units
  *          double codePhaseStep     I   code-table grid increment per IF sample
@@ -536,19 +534,17 @@ void localCodeGen(const int *caCode, size_t codeLen, double remCodePhase, double
 	const int codeIndexBase = (int)floor(remCodePhase);
 	remCodePhase -= (double)codeIndexBase;
 
-	/* caCode is laid out as [dataCode(last,1..N,first), pilotCode(last,1..N,first)].
-	   Shifting the starting phase by -earlyLateSpc + 1.0 accounts for the leading
-	   guard value. The caller keeps all E/P/L indexes within each guarded span.
-	   Both branches share the same E/P/L indexes; only the code-table
-	   base changes because the caller has prepared the common-grid tables. */
+	/* caCode concatenates guarded data and pilot tables.
+	   The caller supplies the guard-phase offset and enough guard points for
+	   all E/P/L indexes; no per-sample wrapping is performed here.
+	   Branches share E/P/L indexes; only the table base offset changes. */
 	short *eCodeD = localCode[0], *pCodeD = localCode[1], * lCodeD = localCode[2];
 	short* eCodeP = localCode[3], * pCodeP = localCode[4], * lCodeP = localCode[5];
 
 	int32x4x2_t Index_reg1, Index_reg2;
 	int16x8x2_t EPL_reg;
 	float32x4x2_t codePhase_reg1, codePhase_reg2;
-	/* Here the natural 0..7 order is fine because code indexes are gathered as
-	   two groups of NEON vectors and packed back to 16 x int16 code chips. */
+	/* Gather two groups of eight chronological indexes, then pack to int16. */
 	const float stepNumber[8] = { 0.0f, 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f };
 	float32x4x2_t stepNumber_reg = { { vld1q_f32(stepNumber), vld1q_f32(stepNumber + 4) } };
 	const float32x4_t remCodePhase_reg = vdupq_n_f32((float)remCodePhase);
@@ -587,7 +583,7 @@ void localCodeGen(const int *caCode, size_t codeLen, double remCodePhase, double
 		vst1q_s16(eCodeP + 8, EPL_reg.val[1]);
 
 		/* ----------------------- Prompt code generation ----------------------- */
-		/* Prompt is just Early shifted by +earlyLateSpc code-table grid units. */
+		/* Prompt is Early shifted by +earlyLateSpc code-table points. */
 		for (int k = 0; k < 2; ++k) {
 			codePhase_reg1.val[k] = vaddq_f32(codePhase_reg1.val[k], earlyLateSpc_reg);
 			codePhase_reg2.val[k] = vaddq_f32(codePhase_reg2.val[k], earlyLateSpc_reg);
@@ -794,7 +790,7 @@ static void* checkedAlignedMalloc(size_t nbytes, const char* name)
 
 /* gatherCode16 ----------------------------------------------------------------
  * Gather 16 local-code chips from the int32 code table and repack them
- * into two NEON vectors of 8 x int16 samples for the existing correlator path.
+ * into two NEON vectors of 8 x int16 samples for correlation.
  * Signed saturation narrows the gathered chips; all indexes must be in bounds.
  * Indexes already include codeIndexBase; no wrap or bounds check is done here.
  * Args   : const int* caCode         I   base of the selected guarded code branch
@@ -881,8 +877,7 @@ static Settings parseSettings(const mxArray* s)
 
 	cfg.trkMode = getStructIntField(s, "trkMode");
 	cfg.fileType = getStructIntField(s, "fileType");
-	/* dllCorrelatorSpacing is fractional in this receiver (default 0.5 chip),
-	   so reading it as int collapses Early/Prompt/Late into the same code. */
+	/* Read fractional Early/Late spacing without integer truncation. */
 	cfg.earlyLateSpc = getStructDoubleField(s, "dllCorrelatorSpacing");
 	cfg.correlatorType = getStructIntField(s, "correlatorType");
 	if (cfg.correlatorType == 1) // SIMD correlator

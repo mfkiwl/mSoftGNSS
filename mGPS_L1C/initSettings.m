@@ -18,9 +18,6 @@ function settings = initSettings()
 % Based on the original SoftGNSS SDR framework by Darius Plausinaitis,
 % Peter Rinder, Nicolaj Bertelsen and Dennis M. Akos.
 %
-% Reference: Adapted within the CU Multi-GNSS SDR receiver framework for GPS L1C.
-% Signal-specific settings in this file refer to GPS L1C.
-%
 %--------------------------------------------------------------------------
 %This program is free software; you can redistribute it and/or
 %modify it under the terms of the GNU General Public License
@@ -42,8 +39,8 @@ function settings = initSettings()
 % $Id: initSettings.m,v 1.9.2.31 2006/08/18 11:41:57 dpl Exp $
 
 %% Important operation modes configuration ==========================
-% Number of milliseconds to be processed used 36000 + any transients (see
-% below - in Nav parameters) to ensure nav subframes are provided
+% Process at least 36000 ms plus tracking transients to include a complete
+% 18-second CNAV-2 frame from an arbitrary starting point.
 settings.msToProcess        = 40000;        %[ms]
 % Number of channels to be used for signal processing
 settings.numberOfChannels   = 15;
@@ -90,7 +87,7 @@ settings.skipAcquisition    = 0;
 settings.gpuACQflag         = 1;             % 0 - Off; 1 - On
 % List of satellites to look for.
 settings.acqSatelliteList   = 1:32;
-% Enable use of pilot channel to do acquisition
+% 0: data-only acquisition; 1: data/pilot combination with weights 1:3.
 settings.pilotACQflag       = 1;             % 0 - Off; 1 - On
 % It is single sideband, so the whole search band is twice of it.
 settings.acqSearchBand      = 5000;        % [Hz]
@@ -100,15 +97,19 @@ settings.acqStep            = 50;          % [Hz]
 settings.acqThreshold       = 2;
 
 %% Tracking loops settings ==========================================
-% Enable/disable use of SIMD/GPU MEX to accelerate tracking
+% Select channel-serial or channel-parallel tracking.
 settings.trkMode                 = 1;    % 0 - Channel-serial tracking;
                                          % 1 - Channel-parallel tracking;
 % Enable/disable use of SIMD/GPU MEX to accelerate tracking
 settings.correlatorType          = 2;    % 0 - Matlab correlator;
                                          % 1 - SIMD correlator;
                                          % 2 - GPU correlator;
-% Enable/disable use of pilot channel for tracking
+% 0: data-only PLL/DLL; 1: joint data/pilot PLL/DLL.
+% Pilot prompt outputs are retained for CNAV-2 frame synchronization.
 settings.pilotTRKflag            = 1;          % 0 - Off; 1 - On
+
+% Pilot local code: full TMBOC, or BOC(1,1) with BOC(6,1) positions zeroed.
+settings.fullBandEn       = 1;           % 0 - Narrowband; 1 - Full band
 
 % Number of right-shift bits for IF data to prevent SIMD correlator
 % overflow when ADC valid bits occupy the high bits

@@ -7,7 +7,6 @@
  * Time: Feb, 20, 2026
  *
  * Notes:
- *   - Input/Output interface is kept compatible with the original implementation.
  *   - fileType = 1: real IF samples [I0 I1 I2 ...]
  *   - fileType = 2: complex interleaved IF samples [I0 Q0 I1 Q1 ...]
  *   - Output layout is 18 x channelCnt:
@@ -31,7 +30,7 @@
 /* Settings struct -------------------------------------------------------------
  * trkMode        : 0 - channel-serial tracking; 1 - channel-parallel tracking
  * fileType       : 1 - real samples; 2 - complex samples
- * earlyLateSpc   : half of the early - late code correlation spacing (chips)
+ * earlyLateSpc   : half of the early-late spacing in code-table points
  *------------------------------------------------------------------------------*/
 typedef struct {
     int trkMode;
@@ -65,10 +64,10 @@ struct GPU_Complex
 	float i;
 	__host__ __device__ GPU_Complex() : r(0.0f), i(0.0f) {};
 
-	// Constructor for a complex number with real amd imag parts of float
+	// Constructor for a complex number with float real and imaginary parts
     __host__ __device__ GPU_Complex(float realPart, float imagPart) : r(realPart), i(imagPart) {}
 
-	// Magnitude of a complex number
+	// Squared magnitude of a complex number
 	__host__ __device__ float magnitude2() { return r * r + i * i; }
 
 	__device__ GPU_Complex operator*(const GPU_Complex& a) {
@@ -160,8 +159,8 @@ __constant__ float d_initCodePhase[CORR_NUMBER];
  *                                              arranged as [B1CDataTable; pilotBOC11Table; pilotBOC61Table]
  *          prhs[3]   double*   remCarrPhase   I   Residual carrier phase for each channel (rad)
  *          prhs[4]   double*   carrPhaseStep  I   Carrier phase step for each sample
- *          prhs[5]   double*   remCodePhase   I   Residual code phase for each channel (chips)
- *          prhs[6]   double*   codePhaseStep  I   Code phase step for each sample (chips/sample)
+ *          prhs[5]   double*   remCodePhase   I   Residual code phase for each channel (code-table points)
+ *          prhs[6]   double*   codePhaseStep  I   Code-table phase increment per IF sample
  *          prhs[7]   int*      startIndex     I   Start sample index for each channel
  *          prhs[8]   int*      chSampSize     I   Number of samples to be processed for each channel
  *          prhs[9]   int       isDataRead     I   Data-read flag (1: read new data, 0: reuse previous data)
@@ -238,13 +237,12 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 		blockPerGrid = (int)(blksize + 100 + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
 		/* The combined QMBOC code table is arranged as:
-		     [B1CData(last,1..N,first); pilotBOC11(last,1..N,first);
-		      pilotBOC61(last,1..N,first)].
+		     [guarded B1CData; guarded pilotBOC11;
+		      guarded pilotBOC61].
 		   Only the small Early/Prompt/Late phase shift is kept here. The data/pilot
 		   branch offset is added later as an integer index in the CUDA kernel,
 		   avoiding loss of fractional code-phase precision in float arithmetic.
-		   The shifts are used with ceil-style indexing to match the MATLAB
-		   reference correlator: index = ceil(codePhase + shift). */
+		   Code-table indexes are formed as ceil(codePhase + shift). */
 		float initCodePhase[CORR_NUMBER] = {
 			(float)(-settings.earlyLateSpc),
 			0.0f,
@@ -272,7 +270,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 		// Get device pointer from host memory
 		CUDA_CHECK(cudaHostGetDevicePointer(&d_corrValues, h_corrValues, 0));
 
-		/* ------- Alloctate CUDA streams ------- */
+		/* ------- Allocate CUDA streams ------- */
 		streams = (cudaStream_t*)malloc(channelCnt * sizeof(cudaStream_t));
 		if (!streams) {
 			mexErrMsgIdAndTxt("gpuCorr:", "Failed to allocate streams memory.");
@@ -384,7 +382,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
  */
 __global__ void mixCarrReal(const short* d_pRawSignal, GPU_Complex* d_BasebandSignal,int blksize, float remCarrPhase,float carrPhaseStep)
 {
-	// CUDA version of floating point NCO and vector dot product integrated
+	// Generate the carrier replica and wipe off the carrier.
 	
 	for (int index = blockIdx.x * blockDim.x + threadIdx.x; index < blksize; index += blockDim.x * gridDim.x){
 		float sin, cos;
@@ -402,7 +400,7 @@ __global__ void mixCarrReal(const short* d_pRawSignal, GPU_Complex* d_BasebandSi
 __global__ void mixCarrComplex(const short* d_pRawSignal, GPU_Complex* d_BasebandSignal,
 	int blksize, float remCarrPhase, float carrPhaseStep)
 {
-	// CUDA version of floating point NCO and vector dot product integrated
+	// Generate the carrier replica and wipe off the carrier.
 	const short2* d_pRawSignalIQ = reinterpret_cast<const short2*>(d_pRawSignal);
 	for (int index = blockIdx.x * blockDim.x + threadIdx.x; index < blksize; index += blockDim.x * gridDim.x) {
 		float sin, cos;

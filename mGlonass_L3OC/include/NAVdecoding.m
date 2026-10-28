@@ -1,26 +1,17 @@
 function [eph, firstSubFrame, TOD] = NAVdecoding(I_P_InputBits)
-% findPreambles finds the first preamble occurrence in the bit stream of
-% each channel. The preamble is verified by check of the spacing between
-% preambles (6sec) and parity checking of the first two words in a
-% subframe. At the same time function returns list of channels, that are in
-% tracking state and with valid preambles in the nav data stream.
+%NAVDECODING Decode GLONASS L3OCd navigation strings.
+%Remove the Barker overlay, decode the convolutional code, resolve string
+%polarity and check CRC-24Q. Types 10, 11 and 12 provide the ephemeris.
 %
-%[eph, firstSubFrame,TOD] = CNAVdecoding(I_P_InputBits)
+%[eph, firstSubFrame,TOD] = NAVdecoding(I_P_InputBits)
 %
 %   Inputs:
-%       I_P_InputBits   - output from the tracking function
-%
+%       I_P_InputBits   - prompt I output, one value per 1 ms primary code.
 %   Outputs:
-%       firstSubframe   - Starting positions of the first message in the 
-%                       input bit stream I_P_InputBits in each channel. 
-%                       The position is CNAV bit(20ms before convolutional decoding) 
-%                       count since start of tracking. Corresponding value will
-%                       be set to inf if no valid preambles were detected in
-%                       the channel.
-%       TOD             - Time Of Week (TOW) of the first message(in seconds).
-%                       Corresponding value will be set to inf if no valid preambles
-%                       were detected in the channel.
-%       eph             - SV ephemeris. 
+%       firstSubFrame   - index of the first valid string in the 1 ms
+%                       tracking stream; inf if no valid string is found.
+%       TOD             - time of day of that string, in seconds.
+%       eph             - decoded satellite ephemeris. 
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  
@@ -110,7 +101,7 @@ function [eph, firstSubFrame, TOD] = NAVdecoding(I_P_InputBits)
         % Find all starting points of all preamble-like patterns
         xcorrCenter = (length(tlmXcorrResult) + 1) / 2;
         %--- Find at what index the preambles start -----------------------
-        % Threshold is set to 18 (allowing up to 2 bit errors in preamble)
+        % A correlation magnitude of at least 18 allows one preamble-bit error.
         index = find(abs(tlmXcorrResult(xcorrCenter : end)) >= 18)';
         
         for i = 1:length(index)

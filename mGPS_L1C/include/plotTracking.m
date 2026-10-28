@@ -41,10 +41,7 @@ for channelNr = channelList
     
     if trackResults(channelNr).status == 'T'      
         %% Select (or create) and clear the figure ========================
-    % The number 200 is added just for more convenient handling of the open
-    % figure windows, when many figures are closed and reopened.
-    % Figures drawn or opened by the user, will not be "overwritten" by
-    % this function.
+    % Use figure channelNr + 200 for this channel's tracking plots.
     
     figure(channelNr +200);
     clf(channelNr +200);
@@ -167,7 +164,12 @@ for channelNr = channelList
         ' (PRN ', ...
         num2str(trackResults(channelNr).PRN), ...
         ') CNo']);
-    plot(trackResults(channelNr).L1C_CNo,'-mo');
+    % Plot combined C/N0 for pilot-assisted tracking, or data-only C/N0.
+    if settings.pilotTRKflag == 1
+        plot(trackResults(channelNr).L1C_CNo,'-mo');
+    else
+        plot(trackResults(channelNr).DataCNo,'-mo');
+    end
     title('CNo Estimation')
     ylabel('dB-Hz')
     xlabel('400msec (or as set in initSettings.m) epoch computation')

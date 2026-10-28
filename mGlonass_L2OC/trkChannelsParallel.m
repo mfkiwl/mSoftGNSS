@@ -3,11 +3,8 @@ function [trackResults, channel]= trkChannelsParallel(fid, channel, settings)
 %
 %   [trackResults, channel] = trkChannelsParallel(fid, channel, settings)
 %
-% This implementation tracks all active PRNs together. Each loop reads a
-% shared IF data buffer large enough for the active channel set, calls the
-% selected parallel correlator backend, and then updates the per-channel
-% DLL/PLL states. It is intended to match the tracking behavior of
-% trkChannelsSerial while reducing repeated file I/O and correlator calls.
+% Process all active PRNs at each tracking epoch using a shared IF buffer.
+% Each integration updates the per-channel DLL and PLL states.
 %
 %   Inputs:
 %       fid             - File identifier of the IF signal record.
@@ -54,7 +51,7 @@ function [trackResults, channel]= trkChannelsParallel(fid, channel, settings)
 %$Id: tracking.m,v 1.14.2.31 2006/08/14 11:38:22 dpl Exp $
 
 %% Initialize result structure ====================================
-% Default channel status. It is replaced after successful tracking.
+% Default channel status before processing.
 trackResults.status         = '-';      % No tracked signal, or lost lock
 % Number of coherent integrations to process.
 NumToProcess =  round(settings.msToProcess/1000/settings.intTime);
@@ -117,7 +114,7 @@ absoluteSample = settings.skipNumberOfSamples + ...
 fineFactor = settings.L2OCFineFactor;
 % Generate the local code table for all acquired channels.
 for channelNr = 1:channelCnt
-    % Get a vector with the B2a data code sampled 1x/chip
+    % Generate the L2OCp local code on the fine TDM/BOC grid
         codeLength = settings.codeLength * fineFactor;
         L2OCpCode = generateL2OcpBOCCode(channel(channelNr).PRN);
         % Then make it possible to do early and late versions
@@ -130,11 +127,11 @@ end
 		L2OCCodeTable = [L2OCpCodeTable L2CSICodeTable];
 
         if settings.correlatorType == 1
-            % SIMD serial correlator expects an int32 local code table.
+            % SIMD parallel correlator expects an int32 local code table.
             L2OCCodeTable = int32(L2OCCodeTable');
         elseif settings.correlatorType == 2
-            % GPU serial correlator expects an int8 local code table.
-            L2OCCodeTable = int8(L2OCCodeTable');
+            % GPU parallel correlator expects a single local code table.
+            L2OCCodeTable = single(L2OCCodeTable');
         end
 
 %% Initialize tracking variables ==================================
@@ -145,9 +142,7 @@ end
 %--- PLL variables --------------------------------------------------------
 % Coherent integration time used by the carrier loop filter.
 PDIcarr = settings.intTime;
-% Calculate second-order PLL filter coefficients. For L2OC the loop is
-% updated every 20 ms, so use unit loop gain; the 1 ms QPSK receivers'
-% k = 0.25 setting makes the discrete carrier loop unstable here.
+% Calculate second-order PLL filter coefficients with unit loop gain.
 [tau1carr, tau2carr] = calcLoopCoef(settings.pllNoiseBandwidth, ...
     settings.pllDampingRatio, 1.0);
 
@@ -373,8 +368,8 @@ for loopCnt =  1:NumToProcess
         if loopCnt == NumToProcess
             % Each channel's tracked PRN
             trackResults(channelNr).PRN     = channel(channelNr).PRN;
-            % If tracking reached the end of the requested interval, copy
-            % the channel status. A future lock detector can replace this.
+            % Copy the acquisition status after completing the tracking interval.
+            % This status does not indicate measured signal lock.
             trackResults(channelNr).status  = channel(channelNr).status;
         end
 

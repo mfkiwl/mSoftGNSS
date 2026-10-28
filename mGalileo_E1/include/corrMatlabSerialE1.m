@@ -4,7 +4,7 @@ function correValues = corrMatlabSerialE1(settings, rawSignal, E1CodeTable, ...
 codeLen = length(E1CodeTable)/2;
 E1BDataCode = E1CodeTable(1:codeLen);
 E1CPilotCode = E1CodeTable(1+codeLen:end);
-% Define early-late offset (in chips)
+% Early-late offset on the 12-point-per-primary-chip local-code grid.
 earlyLateSpc = settings.dllCorrelatorSpacing;
 
 rawSignal = rawSignal';
@@ -15,7 +15,7 @@ correValues = zeros(1,12);
 if (settings.fileType == 2)
     rawSignal1 = rawSignal(1:2:end);
     rawSignal2 = rawSignal(2:2:end);
-    rawSignal = rawSignal1 + 1i .* rawSignal2;  % transpose vector
+    rawSignal = rawSignal1 + 1i .* rawSignal2;  % Form complex I/Q samples.
 end
 
 blksize = length(rawSignal);
@@ -60,7 +60,7 @@ trigarg = carrPhaseStep .* (0:blksize) + remCarrPhase;
 % bandband
 carrsig = exp(-1i .* trigarg(1:blksize));
 
-%% Do correlation to Generate the six standard accumulated values -----------
+%% Accumulate Early/Prompt/Late I/Q values for each code branch -------------
 % First mix to baseband
 iBasebandSignal = real(carrsig .* rawSignal);
 qBasebandSignal = imag(carrsig .* rawSignal);

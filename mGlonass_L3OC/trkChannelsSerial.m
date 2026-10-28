@@ -1,12 +1,12 @@
 function [trackResults, channel]= trkChannelsSerial(fid, channel, settings)
 % Performs code and carrier tracking for L3OC signals of all channels.
 %
-%[trackResults, channel] = tracking(fid, channel, settings)
+%[trackResults, channel] = trkChannelsSerial(fid, channel, settings)
 %
 %   Inputs:
 %       fid             - file identifier of the signal record.
 %       channel         - PRN, carrier frequencies and code phases of all
-%                       satellites to be tracked (prepared by preRum.m from
+%                       satellites to be tracked (prepared by preRun.m from
 %                       acquisition results).
 %       settings        - receiver settings.
 %   Outputs:
@@ -110,8 +110,12 @@ PDIcode = settings.intTime;
     settings.dllDampingRatio, 1.0);
 
 %--- PLL variables --------------------------------------------------------
+% Summation interval
+PDIcarr = settings.intTime;
+
 % Calculate filter coefficient values
-[pf3,pf2,pf1] = calcLoopCoefCarr(settings);
+[tau1carr, tau2carr] = calcLoopCoef(settings.pllNoiseBandwidth, ...
+                                    settings.pllDampingRatio, 1.0);
 % -------- Number of acquired signals ------------------------------------
 % Number of acquired signals
 TrackedNr = nnz([channel.status]== 'T');
@@ -194,8 +198,8 @@ for channelNr = 1:settings.numberOfChannels
             % SIMD serial correlator expects an int32 local code table.
             L3OCCodeTable = int32(L3OCCodeTable);
         elseif settings.correlatorType == 2
-            % GPU serial correlator expects an int8 local code table.
-            L3OCCodeTable = int8(L3OCCodeTable);
+            % GPU serial correlator expects a single local code table.
+            L3OCCodeTable = single(L3OCCodeTable);
         end
 
         %--- Perform various initializations ------------------------------
@@ -218,8 +222,8 @@ for channelNr = 1:settings.numberOfChannels
         oldCodeError = 0.0;
 
         % Carrier/Costas loop parameters
-        d2CarrError  = 0.0;
-        dCarrError   = 0.0;
+        oldCarrNco   = 0.0;
+        oldCarrError = 0.0;
 
         % For C/No computation
         CNoValue = zeros(1,3);
@@ -337,9 +341,10 @@ for channelNr = 1:settings.numberOfChannels
             end
 
             % Implement carrier loop filter and generate NCO command
-            d2CarrError = d2CarrError + carrError * pf3;
-            dCarrError  = d2CarrError + carrError * pf2 + dCarrError;
-            carrNco     = dCarrError + carrError * pf1;
+            carrNco = oldCarrNco + (tau2carr/tau1carr) * ...
+                (carrError - oldCarrError) + carrError * (PDIcarr/tau1carr);
+            oldCarrNco   = carrNco;
+            oldCarrError = carrError;
 
             % Save carrier frequency for current correlation
             trackResults(channelNr).carrFreq(loopCnt) = carrFreq;
@@ -418,9 +423,7 @@ for channelNr = 1:settings.numberOfChannels
             
         end % for loopCnt
 
-        % If we got so far, this means that the tracking was successful
-        % Now we only copy status, but it can be update by a lock detector
-        % if implemented
+        % Copy the acquisition status; no lock decision is made here.
         trackResults(channelNr).status  = channel(channelNr).status;
 
     end % if a PRN is assigned

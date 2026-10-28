@@ -5,10 +5,8 @@ function factor = CalcWeighingFactor(settings)
 %factor = CalcWeighingFactor(settings)
 %
 %   Inputs:
-%       settings      - Receiver settings. Provides information about
-%                       sampling and intermediate frequencies and other
-%                       parameters including the list of the satellites to
-%                       be acquired.
+%       settings      - Receiver settings: nominal primary-code frequency
+%                       (codeFreqBasis) and front-end bandwidth (FEBW).
 %   Outputs:
 %       factor       - weighting factor of data channel 
  
@@ -16,8 +14,6 @@ function factor = CalcWeighingFactor(settings)
 %                         CU Multi-GNSS SDR  
 % (C) Written by Yafeng Li, Nagaraj C. Shivaramaiah and Dennis M. Akos
 
-% Reference: Adapted within the CU Multi-GNSS SDR receiver framework for GPS L1C.
-% Signal-specific comments in this file refer to GPS L1C.
 %
 %--------------------------------------------------------------------------
 %This program is free software; you can redistribute it and/or

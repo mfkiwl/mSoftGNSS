@@ -4,10 +4,10 @@
 %"acqSatelliteList" in the settings structure. Function saves code phase
 %and frequency of the detected signals in the "acqResults" structure.
 %
-%acqResults = acquisition(longSignal, settings)
+%acqResults = acquisitionCPU(fid,settings)
 %
 %   Inputs:
-%       longSignal    - 11 ms of raw signal from the front-end
+%       fid           - file identifier of the IF signal record.
 %       settings      - Receiver settings. Provides information about
 %                       sampling and intermediate frequencies and other
 %                       parameters including the list of the satellites to
@@ -173,7 +173,7 @@ for PRN = settings.acqSatelliteList
         % Indicate PRN number of the detected signal
         fprintf('%02d ', PRN);
         %--- Prepare 20ms code, carrier and input signals -----------------
-        % B2b code with 1023 chips
+        % B2b code with 10230 chips
         B2bICode = generateB2bICode(PRN,settings);
         
         % B2bI code sample index

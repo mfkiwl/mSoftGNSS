@@ -183,7 +183,7 @@ for PRN = settings.acqSatelliteList
         E5bICode = generateE5bIcode(PRN,1);
         E5bQCode = generateE5bQcode(PRN,1);
         
-        % E5a codes sample index
+        % E5b primary-code sampling indices
         codeValueIndex = floor( (0 : 200*samplesPerCode -1) * ts ...
             * settings.codeFreqBasis);
         

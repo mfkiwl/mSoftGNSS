@@ -200,18 +200,18 @@ for channelNr = 1:settings.numberOfChannels
         % Get a vector of the B1C data-channel code with BOC(1,1)
         % modulation at rate of codeLength*2
         B1CData = generateDataBOC11(settings,channel(channelNr).PRN);
-        % Then make it possible to do early and late versions
-        B1CData = [B1CData(codeLength*12) B1CData B1CData(1)]; %#ok<AGROW>
+        % Add 12 guard code-table points at each end for early/late indexing.
+        B1CData = [B1CData(end-11:end) B1CData B1CData(1:12)]; %#ok<AGROW>
 
         % Get a vector with the pilot BOC(1,1) spreading waveform
         pilotBOC11 = generatePilotBOC11(settings,channel(channelNr).PRN);
-        % Then make it possible to do early and late versions
-        pilotBOC11 = [pilotBOC11(codeLength*12) pilotBOC11 pilotBOC11(1)];
+        % Add 12 guard code-table points at each end for early/late indexing.
+        pilotBOC11 = [pilotBOC11(end-11:end) pilotBOC11 pilotBOC11(1:12)];
 
         % Get a vector with the pilot BOC(6,1) spreading waveform
         pilotBOC61 = generatePilotBOC61(settings,channel(channelNr).PRN);
-        % Then make it possible to do early and late versions
-        pilotBOC61 = [pilotBOC61(codeLength*12) pilotBOC61 pilotBOC61(1)];
+        % Add 12 guard code-table points at each end for early/late indexing.
+        pilotBOC61 = [pilotBOC61(end-11:end) pilotBOC61 pilotBOC61(1:12)];
 
         % Store data and pilot branches in the same table layout used by
         % the shared QMBOC serial correlators.
@@ -310,23 +310,23 @@ for channelNr = 1:settings.numberOfChannels
             % carrier NCO and the sampling frequency.
             carrPhaseStep = carrFreq * 2.0 * pi / settings.samplingFreq;
 
+            % Convert phases to the 12x grid; offset only the correlator
+            % input by 11 points for the additional leading guard points.
             if settings.correlatorType == 0 % Using MATLAB correlator
-                % remCodePhase and codePhaseStep are converted from primary
-                % chips to the 12x local-code grid before correlation.
                 correValues = corrMatlabSerialB1C(settings, rawSignal, ...
-                    B1CCodeTable, remCarrPhase, carrPhaseStep, remCodePhase*12,...
+                    B1CCodeTable, remCarrPhase, carrPhaseStep, remCodePhase*12+11,...
                     codePhaseStep*12);
             elseif settings.correlatorType == 1 % Using SIMD of CPU
                 % Use the CPU SIMD backend selected for the running MATLAB architecture.
                 % Uses the same QMBOC interface and 12x code phase units.
                 correValues = simdCorrelator(settings,rawSignal, ...
-                    B1CCodeTable, remCarrPhase,carrPhaseStep,remCodePhase*12, ...
+                    B1CCodeTable, remCarrPhase,carrPhaseStep,remCodePhase*12+11, ...
                     codePhaseStep*12);
             elseif settings.correlatorType == 2 % Using GPU
                 % Compile with: mexcuda corrGPUSerialQMBOC.cu
                 % Uses the same QMBOC interface and 12x code phase units.
                 correValues = corrGPUSerialQMBOC(settings,rawSignal, ...
-                    B1CCodeTable, remCarrPhase,carrPhaseStep,remCodePhase*12, ...
+                    B1CCodeTable, remCarrPhase,carrPhaseStep,remCodePhase*12+11, ...
                     codePhaseStep*12, channel(channelNr).PRN);
             end
 
@@ -477,9 +477,7 @@ for channelNr = 1:settings.numberOfChannels
 
         end % for loopCnt
 
-        % If we got so far, this means that the tracking was successful
-        % Now we only copy status, but it can be update by a lock detector
-        % if implemented
+        % Copy the channel status after processing its tracking interval.
         trackResults(channelNr).status  = channel(channelNr).status;
 
     end % if a PRN is assigned

@@ -14,9 +14,7 @@ function [eph] = ephemeris(navBitsBin,eph)
 %                   To prevent loss of previous decoded messages, the eph structure
 %                   must be passed onto this function.
 %   Outputs:
-%       TOW         - Time Of Week (TOW) of the first sub-frame in the bit
-%                   stream (in seconds)
-%       eph         - SV ephemeris
+%       eph         - SV ephemeris, including frame-start BDT in eph.TOW [s].
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  

@@ -197,8 +197,8 @@ for channelNr = 1:settings.numberOfChannels
             % SIMD serial correlator expects an int32 local code table.
             B2aCodeTable = int32(B2aCodeTable);
         elseif settings.correlatorType == 2
-            % GPU serial correlator expects an int8 local code table.
-            B2aCodeTable = int8(B2aCodeTable);
+            % GPU serial correlator expects a single local code table.
+            B2aCodeTable = single(B2aCodeTable);
         end
 
         %--- Perform various initializations ------------------------------

@@ -6,8 +6,7 @@ function [trackResults, channel]= trkChannelsSerial(fid, channel, settings)
 % This implementation processes one channel at a time. For every active
 % PRN it reads one integration interval from the IF file, calls the selected
 % correlator backend, and updates the carrier PLL and code DLL before
-% moving to the next interval. The serial form is useful as the reference
-% implementation for the SIMD/GPU accelerated correlators.
+% moving to the next interval.
 %
 %   Inputs:
 %       fid             - File identifier of the IF signal record.
@@ -115,9 +114,7 @@ PDIcode = settings.intTime;
 %--- PLL variables --------------------------------------------------------
 % Coherent integration time used by the carrier loop filter.
 PDIcarr = settings.intTime;
-% Calculate second-order PLL filter coefficients. For L2C the loop is
-% updated every 20 ms, so use unit loop gain; the 1 ms QPSK receivers'
-% k = 0.25 setting makes the discrete carrier loop unstable here.
+% Calculate second-order PLL filter coefficients with unit loop gain.
 [tau1carr, tau2carr] = calcLoopCoef(settings.pllNoiseBandwidth, ...
     settings.pllDampingRatio, 1.0);
 % -------- Number of acquired signals --------------------------------------
@@ -212,8 +209,8 @@ for channelNr = 1:settings.numberOfChannels
             % SIMD serial correlator expects an int32 local code table.
             L2CCodeTable = int32(L2CCodeTable);
         elseif settings.correlatorType == 2
-            % GPU serial correlator expects an int8 local code table.
-            L2CCodeTable = int8(L2CCodeTable);
+            % GPU serial correlator expects a single local code table.
+            L2CCodeTable = single(L2CCodeTable);
         end
 
         %--- Perform various initializations ------------------------------

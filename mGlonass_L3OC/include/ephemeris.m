@@ -1,21 +1,16 @@
 function [eph, TOD] = ephemeris(navBits, eph)
-%Function decodes ephemerides and TOD from the given bit stream. The stream
-%(array) in the parameter BITS must contain 1275 bits. The first element in
-%the array must be the first bit of a string. The string ID of the
-%first string in the array is not important.
-%
+%Decode one 300-bit GLONASS L3OCd navigation string.
+%The input starts with the 20-bit preamble. Decoded fields are added to
+%the ephemeris structure supplied from previous strings.
 %
 %[eph, TOD] = ephemeris(navBits, eph)
 %
 %   Inputs:
-%       bits        - bits of the navigation messages (15 strings).
-%                   Type is character array and it must contain only
-%                   characters '0' or '1'.
+%       navBits     - 300 navigation bits as a numeric 0/1 vector.
+%       eph         - previously decoded satellite ephemeris, if available.
 %   Outputs:
-%       TOD         - Time Of Day (TOD) of the first string in the bit
-%                   stream (in seconds)
-%       eph         - SV ephemeris
-%
+%       TOD         - time of day from the string timestamp, in seconds.
+%       eph         - updated satellite ephemeris.
 %--------------------------------------------------------------------------
 %                           CU Multi-GNSS SDR  
 %

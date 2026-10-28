@@ -5,7 +5,7 @@ codeLen       = length(B1CCodeTable)/3;
 B1CDataCode   = B1CCodeTable(1:codeLen);
 B1CPilotCode  = B1CCodeTable(1+codeLen:codeLen*2);
 pilotBOC61    = B1CCodeTable(1+codeLen*2:end);
-% Define early-late offset (in chips)
+% Early/late offset in 12-point-per-primary-chip code-table units.
 earlyLateSpc = settings.dllCorrelatorSpacing;
 
 rawSignal = rawSignal';
@@ -59,7 +59,7 @@ trigarg = carrPhaseStep .* (0:blksize) + remCarrPhase;
 % baseband
 carrsig = exp(-1i .* trigarg(1:blksize));
 
-%% Do correlation to Generate the six standard accumulated values -----------
+%% Accumulate E/P/L I/Q correlations for each signal branch ----------------
 % First mix to baseband
 iBasebandSignal = real(carrsig .* rawSignal);
 qBasebandSignal = imag(carrsig .* rawSignal);

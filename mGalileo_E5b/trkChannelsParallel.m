@@ -45,7 +45,7 @@ function [trackResults, channel]= trkChannelsParallel(fid, channel, settings)
 
 %% Initialize result structure ====================================
 % Channel status
-trackResults.status         = '-';      % No tracked signal, or lost lock
+trackResults.status         = '-';      % No tracked signal
 % The absolute sample in the record of the E5b code start:
 trackResults.absoluteSample = zeros(1, settings.msToProcess);
 % Freq of the PRN code:
@@ -128,8 +128,8 @@ if settings.correlatorType == 1
     % For SIMD formatting
     E5bCodeTable = int32(E5bCodeTable');
 elseif settings.correlatorType == 2
-    % For GPS formatting
-    E5bCodeTable = int8(E5bCodeTable');
+    % Transpose into single-precision channel columns for the GPU.
+    E5bCodeTable = single(E5bCodeTable');
 end
 
 %% Initialize tracking variables ==================================
@@ -335,7 +335,7 @@ for loopCnt =  1:codePeriods
             % data channel carrier phase. Here we rotate the pilot
             % channel phase pi/2 back to the data channel phase.
             QI = (pilot_I_P + 1i * pilot_Q_P) * exp(-1i * pi/2);
-            % atan is not affectede by the NH code modulation
+            % The Costas discriminator is insensitive to secondary-code polarity.
             carrErrorQ = atan(imag(QI)/real(QI)) / (2.0 * pi);
             % As the data and pilot power is the same, so a simple
             % avergae is used as the carrier phase error estimate
@@ -400,9 +400,7 @@ for loopCnt =  1:codePeriods
         if loopCnt == codePeriods
             % Each channel's tracked PRN
             trackResults(channelNr).PRN     = channel(channelNr).PRN;
-            % If we got so far, this means that the tracking was successful
-            % Now we only copy status, but it can be update by a lock detector
-            % if implemented
+            % Copy channel status; no lock-detector decision is made here.
             trackResults(channelNr).status  = channel(channelNr).status;
         end
 

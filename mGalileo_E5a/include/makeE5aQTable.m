@@ -1,17 +1,14 @@
 function E5aQCodesTable = makeE5aQTable(PRN,settings)
-%Function generates E5a-Q codes for the specified PRN based on the settings
-%provided in the structure "settings". The codes are digitized at the
-%sampling frequency specified in the settings structure.
-%One row in the "E5aQCodesTable" is one E5a-Q code. The row number is the PRN
-%number of the E5a-Q code.
+%Sample the first primary-code period of the E5aQ tiered code.
+%The sampling frequency is specified in settings.samplingFreq.
 %
-%E5aQCodesTable = makeE5aQTable(settings, PRN)
+%E5aQCodesTable = makeE5aQTable(PRN,settings)
 %
 %   Inputs:
 %       settings        - receiver settings
+%       PRN             - PRN number of the sequence
 %   Outputs:
-%       E5aQCodesTable   - an array of arrays (matrix) containing E5a-Q codes
-%                       for all satellite PRNs
+%       E5aQCodesTable   - row vector of code samples for the specified PRN
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  
@@ -43,14 +40,14 @@ samplesPerCode = round(settings.samplingFreq / ...
 ts = 1/settings.samplingFreq;   % Sampling period in sec
 tc = 1/settings.codeFreqBasis;  % E5aQ chip period in sec
 
-%--- Generate E5aQ primary code for given PRN -----------------------------------
+%--- Generate E5aQ tiered code for the given PRN ------------------------------
 E5aQCode = generateE5aQcode(PRN,2);
 
 %=== Digitizing =======================================================
 
 %--- Make index array to read E5aQ code values -------------------------
 % The length of the index array depends on the sampling frequency -
-% number of samples per millisecond (because one E5a-Q code period is one
+% number of samples per millisecond (because one E5aQ primary-code period is one
 % millisecond).
 codeValueIndex = ceil((ts * (1:samplesPerCode)) / tc);
 

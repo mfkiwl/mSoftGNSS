@@ -1,12 +1,7 @@
-% Script postProcessing.m processes the raw signal from the specified data
-% file (in settings) operating on blocks of 37 seconds of data.
-%
-% First it runs acquisition code identifying the satellites in the file,
-% then the code and carrier for each of the satellites are tracked, storing
-% the 1msec accumulations.  After processing all satellites in the 37 sec
-% data block, then postNavigation is called. It calculates pseudoranges
-% and attempts a position solutions. At the end plots are made for that
-% block of data.
+% Script postProcessing.m processes the configured IF-data interval.
+% Acquisition initializes the tracking channels. Tracking stores coherent
+% integration results for navigation decoding and plotting.
+% Post-navigation decodes ephemerides and computes pseudoranges and positions.
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR

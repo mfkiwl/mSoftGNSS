@@ -2,15 +2,14 @@ function E5aQ = generateE5aQcode(PRN,flag)
 % This function generates Galileo E5aQ primary/tiered code in bipolar 
 % format (-1, +1) for PRNs 1 to 50 (no care is taken if PRN number is > 50)
 %
-% E5aQ = generateE5aQcode(PRN)
+% E5aQ = generateE5aQcode(PRN,flag)
 %
 %   Inputs:
 %       PRN         - PRN number of the sequence.
 %       flag        - 1: primary code; 2: tiered code.
 %
 %   Outputs:
-%       E5BQ        - a vector containing the E5aQ primary code sequence
-%                   (chips).
+%       E5aQ        - E5aQ primary or tiered code sequence (chips).
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  
@@ -85,7 +84,7 @@ for ind = 1:length(Pri_E5aQ)
     RegOut1 = Register1 .* taps1_coef;
     RegOut2 = Register2 .* taps2_coef;
     
-    % E5BQ code sequence output (bipolar format)
+    % E5aQ code sequence output (bipolar format)
     Pri_E5aQ(ind) = (1 - 2* RegOut1(1)) * (1 - 2* RegOut2(1));
     
     % Exclusive OR operation for feedback: change to bipolar format (-1,

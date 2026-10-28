@@ -6,11 +6,10 @@ function correValues = corrMatlabParallelB1C(settings, rawSignal, B1CCodeTable, 
 %   correlators so it can be used directly in trkChannelsParallel.m when
 %   settings.correlatorType == 0.
 %
-%   Input/output layout follows the MEX correlators:
-%       correValues = [I_E; Q_E; I_P; Q_P; I_L; Q_L;
-%                      pilot_I_E; pilot_Q_E; pilot_I_P;
-%                      pilot_Q_P; pilot_I_L; pilot_Q_L]
-%   where each column corresponds to one tracking channel.
+%   Each output column contains six E/P/L I/Q values per branch:
+%       rows 1:6   - data BOC(1,1)
+%       rows 7:12  - pilot BOC(1,1)
+%       rows 13:18 - pilot BOC(6,1), zero when fullBandEn == 0.
 
 persistent rawSignalI rawSignalQ rawSignalT
 
@@ -24,13 +23,13 @@ elseif (settings.fileType == 2) && (isDataRead || isempty(rawSignalI) || isempty
     rawSignalQ = rawSignal(2:2:end)';
 end
 
-% Number of active tracking channels in this millisecond.
+% Number of active tracking channels in this coherent integration.
 channelCnt = numel(startIdx);
 
-% Output order per channel: [IE QE IP QP IL QL]^T.
+% Output order per branch: [IE QE IP QP IL QL]^T.
 correValues = zeros(18, channelCnt);
 
-% Define early-late offset (in chips).
+% Early/late offset in 12-point-per-primary-chip code-table units.
 earlyLateSpc = settings.dllCorrelatorSpacing;
 
 for channelNr = 1:channelCnt
@@ -88,7 +87,7 @@ for channelNr = 1:channelCnt
     carrCos = cos(trigarg);
     carrSin = sin(trigarg);
 
-    %% Do correlation to generate the six standard accumulated values -----
+    %% Accumulate E/P/L I/Q correlations for each signal branch ------------
     % First mix to baseband
     if settings.fileType == 1
         iBasebandSignal = rawSignalBlock .* carrCos;

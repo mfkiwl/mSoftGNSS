@@ -1,11 +1,11 @@
 % Script postProcessing.m processes the raw signal from the specified data
-% file (in settings) operating on blocks of 37 seconds of data.
+% file (in settings) over the configured processing interval.
 %
 % First it runs acquisition code identifying the satellites in the file,
 % then the code and carrier for each of the satellites are tracked, storing
-% the 1msec accumulations.  After processing all satellites in the 37 sec
-% data block, then postNavigation is called. It calculates pseudoranges
-% and attempts a position solutions. At the end plots are made for that
+% the 10 ms accumulations. After processing all satellites in the configured
+% data block, postNavigation is called. It calculates pseudoranges
+% and attempts a position solution. At the end plots are made for that
 % block of data.
 
 %--------------------------------------------------------------------------
@@ -44,8 +44,8 @@
 % 3.2) Pass the channel structure and the file identifier to the tracking
 % function. It will read and process the data. The tracking results are
 % stored in the trackResults structure. The results can be accessed this
-% way (the results are stored each millisecond):
-% trackResults(channelNumber).XXX(fromMillisecond : toMillisecond), where
+% way (the results are stored each tracking integration epoch):
+% trackResults(channelNumber).XXX(fromEpoch : toEpoch), where
 % XXX is a field name of the result (e.g. I_P, codePhase etc.)
 %
 % 4) Pass tracking results to the navigation solution function. It will
@@ -70,7 +70,7 @@ if (fid > 0)
         startTime = datetime("now");
 
         if settings.gpuACQflag == 0
-            % Use GPU acceleration for acquisition
+            % Use CPU processing for acquisition
             acqResults = acquisitionCPU(fid,settings);
         elseif settings.gpuACQflag == 1
             % Use GPU acceleration for acquisition
@@ -86,7 +86,7 @@ if (fid > 0)
     %% Initialize channels and prepare for the run ================
 
     % Start further processing only if a GNSS signal was acquired (the
-    % field FREQUENCY will be set to 0 for all not acquired signals)
+    % field carrFreq will be set to 0 for all not acquired signals)
     if (any(acqResults.carrFreq))
         channel = preRun(acqResults, settings);
         showChannelStatus(channel, settings);

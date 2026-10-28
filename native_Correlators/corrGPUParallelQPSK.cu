@@ -7,7 +7,7 @@
  * Time: Feb, 20, 2026
  *
  * Notes:
- *   - Input/Output interface is kept compatible with the original implementation.
+ *   - Code tables use float32; IF samples use int16 and outputs use double.
  *   - fileType = 1: real IF samples [I0 I1 I2 ...]
  *   - fileType = 2: complex interleaved IF samples [I0 Q0 I1 Q1 ...]
  *   - Output layout is 12 x channelCnt:
@@ -30,7 +30,7 @@
 /* Settings struct -------------------------------------------------------------
  * trkMode        : 0 - channel-serial tracking; 1 - channel-parallel tracking
  * fileType       : 1 - real samples; 2 - complex samples
- * earlyLateSpc   : half of the early - late code correlation spacing (chips)
+ * earlyLateSpc   : half of the early-late spacing in code-table points
  *------------------------------------------------------------------------------*/
 typedef struct {
     int trkMode;
@@ -64,10 +64,10 @@ struct GPU_Complex
 	float i;
 	__host__ __device__ GPU_Complex() : r(0.0f), i(0.0f) {};
 
-	// Constructor for a complex number with real amd imag parts of float
+	// Constructor for a complex number with float real and imaginary parts
     __host__ __device__ GPU_Complex(float realPart, float imagPart) : r(realPart), i(imagPart) {}
 
-	// Magnitude of a complex number
+	// Squared magnitude of a complex number
 	__host__ __device__ float magnitude2() { return r * r + i * i; }
 
 	__device__ GPU_Complex operator*(const GPU_Complex& a) {
@@ -118,7 +118,7 @@ struct GPU_Complex
  *------------------------------------------------------------------------------*/
 __global__ void mixCarrReal(const short*, GPU_Complex*, int, float, float);
 __global__ void mixCarrComplex(const short*, GPU_Complex*, int, float, float);
-__global__ void correlator(GPU_Complex*, GPU_Complex*, const signed char* __restrict__, float, int, float, int, int);
+__global__ void correlator(GPU_Complex*, GPU_Complex*, const float* __restrict__, float, int, float, int, int);
 void cleanup(void);
 
 /* checkInputs -------------------------------------------------------------
@@ -144,7 +144,7 @@ static Settings parseSettings(const mxArray* s);
  * settings            : cached receiver settings parsed from MATLAB struct
  *------------------------------------------------------------------------------*/
 static short * d_pRawSignal;
-static signed char ** d_ppCaCode;
+static float ** d_ppCaCode;
 static GPU_Complex **d_ppBasebandSignal, * d_corrValues;
 static std::complex<float>* h_corrValues;
 static cudaStream_t* streams;
@@ -155,12 +155,12 @@ __constant__ float d_initCodePhase[CORR_NUMBER];
 /* The gateway function --------------------------------------------------------
  * Args   : prhs[0]   Settings  settings       I   Receiver settings structure
  *          prhs[1]   int16*    rawSignal      I   Input IF signal samples
- *          prhs[2]   int8*     caCodeTable    I   Local code table for all channels,
+ *          prhs[2]   float*    caCodeTable    I   Local code table for all channels,
  *                                              arranged as [dataCodeTable; pilotCodeTable]
  *          prhs[3]   double*   remCarrPhase   I   Residual carrier phase for each channel (rad)
  *          prhs[4]   double*   carrPhaseStep  I   Carrier phase step for each sample
- *          prhs[5]   double*   remCodePhase   I   Residual code phase for each channel (chips)
- *          prhs[6]   double*   codePhaseStep  I   Code phase step for each sample (chips/sample)
+ *          prhs[5]   double*   remCodePhase   I   Residual code phase for each channel (code-table points)
+ *          prhs[6]   double*   codePhaseStep  I   Code-table phase increment per IF sample
  *          prhs[7]   int*      startIndex     I   Start sample index for each channel
  *          prhs[8]   int*      chSampSize     I   Number of samples to be processed for each channel
  *          prhs[9]   int       isDataRead     I   Data-read flag (1: read new data, 0: reuse previous data)
@@ -174,7 +174,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 {
 	/* --------------- Declare all variables --------------- */
 	short* rawSignal;
-	signed char* caCodeTable;
+	float* caCodeTable;
 	int* startIndex, * chSampSize;
 	double* remCarrPhase, * carrPhaseStep, * remCodePhase, * codePhaseStep;
 	double* corrValues;
@@ -208,8 +208,8 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
          *   2) one device-side baseband buffer after carrier wipeoff
          *------------------------------------------------------------------------ */
 		// PRN codes memory
-		caCodeTable = (signed char*)mxGetData(prhs[2]);
-		d_ppCaCode = (signed char**)malloc(sizeof(signed char*) * channelCnt);
+		caCodeTable = (float*)mxGetData(prhs[2]);
+		d_ppCaCode = (float**)malloc(sizeof(float*) * channelCnt);
 		// Baseband signal memory
 		d_ppBasebandSignal = (GPU_Complex**)malloc(sizeof(GPU_Complex*) * channelCnt);
 		
@@ -224,10 +224,10 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 		{
 			dims[1] = chInd;
 			size_t index = mxCalcSingleSubscript(prhs[2], (size_t)2, dims);
-			signed char* caCode = &caCodeTable[index];
+			float* caCode = &caCodeTable[index];
 			//malloc device global memory for caCodeTable
-			CUDA_CHECK(cudaMalloc(&d_ppCaCode[chInd], sizeof(signed char) * codeLen));
-			CUDA_CHECK(cudaMemcpy(d_ppCaCode[chInd], caCode, codeLen * sizeof(signed char), cudaMemcpyHostToDevice));
+			CUDA_CHECK(cudaMalloc(&d_ppCaCode[chInd], sizeof(float) * codeLen));
+			CUDA_CHECK(cudaMemcpy(d_ppCaCode[chInd], caCode, codeLen * sizeof(float), cudaMemcpyHostToDevice));
 			//malloc device global memory for local I / Q branch
 			CUDA_CHECK(cudaMalloc(&d_ppBasebandSignal[chInd], sizeof(GPU_Complex) * (blksize + 100)));
 		}
@@ -236,7 +236,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 		blockPerGrid = (int)(blksize + 100 + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
 		/* The combined QPSK code table is arranged as:
-		     [dataCode(last,1..N,first); pilotCode(last,1..N,first)].
+		     [guarded dataCode; guarded pilotCode].
 		   Keep only the Early/Prompt/Late offset here. MATLAB uses
 		   ceil(codePhase +/- earlyLateSpc) + 1 on the guarded code table; the
 		   CUDA kernel below implements the equivalent 0-based ceil index. The
@@ -265,7 +265,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 		// Get device pointer from host memory
 		CUDA_CHECK(cudaHostGetDevicePointer(&d_corrValues, h_corrValues, 0));
 
-		/* ------- Alloctate CUDA streams ------- */
+		/* ------- Allocate CUDA streams ------- */
 		streams = (cudaStream_t*)malloc(channelCnt * sizeof(cudaStream_t));
 		if (!streams) {
 			mexErrMsgIdAndTxt("gpuCorr:", "Failed to allocate streams memory.");
@@ -376,7 +376,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
  */
 __global__ void mixCarrReal(const short* d_pRawSignal, GPU_Complex* d_BasebandSignal,int blksize, float remCarrPhase,float carrPhaseStep)
 {
-	// CUDA version of floating point NCO and vector dot product integrated
+	// Generate the carrier replica and wipe off the carrier.
 	
 	for (int index = blockIdx.x * blockDim.x + threadIdx.x; index < blksize; index += blockDim.x * gridDim.x){
 		float sin, cos;
@@ -394,7 +394,7 @@ __global__ void mixCarrReal(const short* d_pRawSignal, GPU_Complex* d_BasebandSi
 __global__ void mixCarrComplex(const short* d_pRawSignal, GPU_Complex* d_BasebandSignal,
 	int blksize, float remCarrPhase, float carrPhaseStep)
 {
-	// CUDA version of floating point NCO and vector dot product integrated
+	// Generate the carrier replica and wipe off the carrier.
 	const short2* d_pRawSignalIQ = reinterpret_cast<const short2*>(d_pRawSignal);
 	for (int index = blockIdx.x * blockDim.x + threadIdx.x; index < blksize; index += blockDim.x * gridDim.x) {
 		float sin, cos;
@@ -416,7 +416,7 @@ __global__ void mixCarrComplex(const short* d_pRawSignal, GPU_Complex* d_Baseban
  * Each thread accumulates a strided partial sum, then a shared-memory tree reduction
  * combines them to obtain one complex correlation value per branch.
  */
-__global__ void correlator(GPU_Complex* d_corrValues, GPU_Complex* d_BasebandSignal, const signed char* __restrict__ d_caCodeTable,
+__global__ void correlator(GPU_Complex* d_corrValues, GPU_Complex* d_BasebandSignal, const float* __restrict__ d_caCodeTable,
     float codePhaseStep, int codePhaseBase, float remCodePhase, int blksize, int halfCodeLen)
 {
     /* Each block computes one QPSK correlator branch:
@@ -440,7 +440,7 @@ __global__ void correlator(GPU_Complex* d_corrValues, GPU_Complex* d_BasebandSig
 				int chipIndex = branchOffset + codePhaseBase + __float2int_ru(localPhase);
 
 				// 2.correlate
-				sumIQ.multiply_acc(d_BasebandSignal[pos], (float)__ldg(&d_caCodeTable[chipIndex]));
+				sumIQ.multiply_acc(d_BasebandSignal[pos], __ldg(&d_caCodeTable[chipIndex]));
 			}
 			accumResult[iAccum] = sumIQ;
 		}
@@ -518,8 +518,8 @@ static void checkInputs(int nrhs, int nlhs, const mxArray* prhs[])
 	if (!mxIsInt16(prhs[1]) || mxIsComplex(prhs[1])) {
 		mexErrMsgIdAndTxt("gpuCorr:rawSignal", "rawSignal must be a real int16 array.");
 	}
-	if (!mxIsInt8(prhs[2]) || mxIsComplex(prhs[2])) {
-		mexErrMsgIdAndTxt("gpuCorr:caCode", "caCodeTable must be a real int8 matrix.");
+	if (!mxIsSingle(prhs[2]) || mxIsComplex(prhs[2])) {
+		mexErrMsgIdAndTxt("gpuCorr:caCode", "caCodeTable must be a real single matrix.");
 	}
 	if ((mxGetM(prhs[2]) & 1) != 0) {
 		mexErrMsgIdAndTxt("gpuCorr:caCodeLength",

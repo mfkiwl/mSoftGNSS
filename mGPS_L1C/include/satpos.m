@@ -2,17 +2,16 @@ function [satPositions, satClkCorr] = satpos(transmitTime, prnList, eph)
 %SATPOS Calculation of X,Y,Z satellites coordinates at TRANSMITTIME for
 %given ephemeris EPH. Coordinates are calculated for each satellite in the
 %list PRNLIST.
-%[satPositions, satClkCorr] = satpos(transmitTime, prnList, eph, settings);
+%[satPositions, satClkCorr] = satpos(transmitTime, prnList, eph);
 %
 %   Inputs:
 %       transmitTime  - transmission time
 %       prnList       - list of PRNs to be processed
 %       eph           - ephemerides of satellites
-%       settings      - receiver settings
 %
 %   Outputs:
-%       satPositions  - positions of satellites (in ECEF system [X; Y; Z;])
-%       satClkCorr    - correction of satellites clocks
+%       satPositions  - ECEF satellite positions [X; Y; Z] in meters
+%       satClkCorr    - satellite clock corrections in seconds
 
 %--------------------------------------------------------------------------
 %                           SoftGNSS v3.0
@@ -47,20 +46,18 @@ for satNr = 1 : numOfSatellites
     prn = prnList(satNr);
     
     %% Find initial satellite clock correction --------------------------------
-    % Note: For L1C CNAV-2, toe is used as the reference time for clock (toc=toe)
+    % The CNAV-2 clock polynomial uses t_oe as its reference epoch.
     
     %--- Find time difference ---------------------------------------------
     % check_t handles week crossovers (adjusts result to [-302400, 302400])
     dt = check_t(transmitTime(satNr) - eph(prn).t_oe);
     
     %--- Calculate clock correction ---------------------------------------
-    % Formula: dt_sv = af0 + af1*dt + af2*dt^2 - T_GD + ISC
-    % Assuming tracking L1C Pilot component: use ISC_L1Cp
-    % If tracking Data component, change to eph(prn).ISC_L1Cd
+    % Apply group delay T_GD and the pilot inter-signal correction ISC_L1Cp.
     
     satClkCorr(satNr) = (eph(prn).a_2 * dt + eph(prn).a_1) * dt + ...
         eph(prn).a_0 - ...
-        eph(prn).T_GD + eph(prn).ISC_L1Cp;%%%%%%%%%
+        eph(prn).T_GD + eph(prn).ISC_L1Cp;
     
     time = transmitTime(satNr) - satClkCorr(satNr);
     

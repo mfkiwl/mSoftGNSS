@@ -2,8 +2,8 @@ function decodedNavBits = B2aLDPCDecoder(navBits_soft_I, navBits_soft_Q)
 % B2aLDPCDecoder decodes one B-CNAV2 frame of BeiDou B2a signal.
 %
 % Inputs:
-%   navBits_soft_I : 600-bit B-CNAV2 soft sequence after secondary-code despreading
-%   navBits_soft_Q : 600-bit Q-branch soft/noise reference sequence
+%   navBits_soft_I : 600 B-CNAV2 soft symbols after secondary-code despreading
+%   navBits_soft_Q : 600 Q-branch soft/noise reference values
 %
 % Output:
 %   decodedNavBits : 288 decoded navigation bits for CRC and ephemeris decoding

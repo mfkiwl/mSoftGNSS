@@ -1,12 +1,9 @@
 function [eph, TOW] = ephemeris(navBitsBin,eph)
-%Function decodes ephemerides and TOW from the given bit stream. The stream
-%(array) in the parameter BITS must contain 1500 bits. The first element in
-%the array must be the first bit of a subframe. The subframe ID of the
-%first subframe in the array is not important.
+%Decode ephemeris fields and TOW from one 300-bit CNAV message.
+%The input starts at the preamble and includes the 24-bit CRC field.
+%CRC checking is performed by CNAVdecoding before this function is called.
 %
-%Function does not check parity!
-%
-%[eph, TOW] = ephemeris(bits, D30Star)
+%[eph, TOW] = ephemeris(navBitsBin,eph)
 %
 %   Inputs:
 %       navBitsBin  - bits of the navigation messages.Type is character array 
@@ -15,8 +12,7 @@ function [eph, TOW] = ephemeris(navBitsBin,eph)
 %                   To prevent loss of previous decoded messages, the eph structure
 %                   must be passed onto this function.
 %   Outputs:
-%       TOW         - Time Of Week (TOW) of the first sub-frame in the bit
-%                   stream (in seconds)
+%       TOW         - GPS time of week at the start of this message [s].
 %       eph         - SV ephemeris
 
 %--------------------------------------------------------------------------

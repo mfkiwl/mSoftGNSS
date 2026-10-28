@@ -43,8 +43,6 @@ for channelNr = channelList
         %% Select (or create) and clear the figure ========================
         % The number 200 is added just for more convenient handling of the open
         % figure windows, when many figures are closed and reopened.
-        % Figures drawn or opened by the user, will not be "overwritten" by
-        % this function.
 
         figure(channelNr +200);
         clf(channelNr +200);

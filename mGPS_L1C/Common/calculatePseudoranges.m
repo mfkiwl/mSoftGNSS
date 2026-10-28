@@ -3,7 +3,7 @@ function [pseudoranges,transmitTime,localTime] = ...
              localTime,channelList, settings)
          
 %calculatePseudoranges finds relative pseudoranges for all satellites
-%listed in CHANNELLIST at the specified millisecond of the processed
+%listed in CHANNELLIST at the specified IF-sample position of the processed
 %signal. The pseudoranges contain unknown receiver clock offset. It can be
 %found by the least squares position search procedure. 
 %
@@ -99,6 +99,5 @@ if (localTime == inf)
 end
 
 %--- Convert travel-time measurement to distance --------------------------
-% The speed of light must be converted from meters per second to meters
-% per millisecond. 
+% Travel time is in seconds and the speed of light is in meters per second.
 pseudoranges    = (localTime - transmitTime) * settings.c; 

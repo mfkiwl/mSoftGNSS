@@ -38,7 +38,7 @@ format ('long', 'g');
 addpath include             % The software receiver functions
 addpath ('Common')          % Common functions between differnt SDR receivers
 addpath ('../IF_Data_Set')     % IF data sets for each SDR receivers
-addpath ('../native_Correlators')     % Mex files for SIMD/GPS acceleration
+addpath ('../native_Correlators')     % Mex files for SIMD/GPU acceleration
 
 %% Print startup ==========================================================
 fprintf(['\n',...

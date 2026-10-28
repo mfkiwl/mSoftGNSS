@@ -1,7 +1,5 @@
 function eph= eph_structure_init()
-% This is in order to make sure variable 'eph' for each SV has a similar
-% structure when only one or even none of the three requisite messages
-% is decoded for a given PRN.
+%Initialize all ephemeris fields before decoding navigation messages.
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  
 % (C) Written by Yafeng Li, Nagaraj C. Shivaramaiah and Dennis M. Akos

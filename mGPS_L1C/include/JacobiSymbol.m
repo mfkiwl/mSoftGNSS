@@ -1,7 +1,7 @@
 function js = JacobiSymbol(a,b)
 % Compute the Jacobi symbol (a/b), where a and b are integers with b odd and positive.
 % When b=p is prime, this is equal to the Legendre symbol, which is 1 if a is a 
-% quadratic residue modulo p, -1 if a is a quadratic nonresidue modulo p, and 0 if a divides p.
+% quadratic residue modulo p, -1 if a is a quadratic nonresidue modulo p, and 0 if p divides a.
 
 %  Inputs:  
 %
@@ -22,8 +22,6 @@ function js = JacobiSymbol(a,b)
 %                         CU Multi-GNSS SDR  
 % (C) Written by Yafeng Li, Nagaraj C. Shivaramaiah and Dennis M. Akos
 
-% Reference: Adapted within the CU Multi-GNSS SDR receiver framework for GPS L1C.
-% Signal-specific comments in this file refer to GPS L1C.
 %
 %--------------------------------------------------------------------------
 %This program is free software; you can redistribute it and/or

@@ -22,8 +22,6 @@ function [navSolutions, eph] = postNavigation(trackResults, settings)
 % Based on the original SoftGNSS SDR framework by Darius Plausinaitis,
 % Peter Rinder, Nicolaj Bertelsen and Dennis M. Akos
 %
-% Reference: Adapted within the CU Multi-GNSS SDR receiver framework for GPS L1C.
-% implementation of an open-source L1C SDR receiver. 
 %
 %--------------------------------------------------------------------------
 %This program is free software; you can redistribute it and/or
@@ -47,7 +45,7 @@ function [navSolutions, eph] = postNavigation(trackResults, settings)
 
 %% Check is there enough data to obtain any navigation solution ===========
 % GPS L1C frame length is 18 seconds (18000 ms). 
-% 36000 ms ensures at least 2 full frames to guarantee one complete ephemeris.
+% 36000 ms spans two frame periods and includes at least one complete frame.
 if (settings.msToProcess < 36000)
     % Show the error message and exit
     disp('Record is too short . Exiting!');
@@ -76,7 +74,7 @@ for channelNr = activeChnList
     end
     
     %=== Decode ephemerides and TOW of the first sub-frame ==================
-    % NOTE: Ensure 'CNAV2decoding' has been replaced with the L1C version!
+    % Decode CNAV-2 and return the frame-start epoch and its TOW.
     [eph(PRN), subFrameStart(channelNr), TOW(channelNr)] = ...
                                        CNAV2decoding(trackResults, channelNr, settings); %#ok<AGROW>
     
@@ -172,8 +170,7 @@ for currMeasNr = 1:measNrSum
         transmitTime(activeChnList);
     
     %% Find satellites positions and clocks corrections =======================
-    % Ensure your 'satpos' function supports L1C ephemeris structure!
-    % Specifically, check handling of 'deltaA' and L1C reference A.
+    % Compute satellite positions and clock corrections from CNAV-2 ephemerides.
     [satPositions, satClkCorr] = satpos(transmitTime(activeChnList), ...
                                         [trackResults(activeChnList).PRN], eph); 
                                                                       

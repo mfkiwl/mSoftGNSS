@@ -122,8 +122,8 @@ if settings.correlatorType == 1
     % SIMD backend expects one int32 code table shared by all active channels.
     B2aCodeTable = int32(B2aCodeTable');
 elseif settings.correlatorType == 2
-    % GPU backend expects one int8 code table shared by all active channels.
-    B2aCodeTable = int8(B2aCodeTable');
+    % GPU backend expects one single code table shared by all active channels.
+    B2aCodeTable = single(B2aCodeTable');
 end
 
 %% Initialize tracking variables ==================================

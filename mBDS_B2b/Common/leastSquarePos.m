@@ -86,7 +86,7 @@ for iter = 1:nmbOfIterations
                      1 ];
     end % for i = 1:nmbOfSatellites
 
-    % These lines allow the code to exit gracefully in case of any errors
+    % Stop if the geometry matrix is rank deficient.
     if rank(A) ~= 4
         pos     = zeros(1, 4);
         dop     = inf(1, 5);

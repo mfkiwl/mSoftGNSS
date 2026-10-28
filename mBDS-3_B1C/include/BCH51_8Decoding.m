@@ -39,8 +39,7 @@ function [flag,decodedBits] = BCH51_8Decoding(bits)
 %$Id: BCH51_8Decoding.m,v 1.1.2.5 2018/07/24 22:00:00 dpl Exp $
 
 
-% Threshold for determining the success or fail of the decoding. This value
-% can be reconfigured according to specific requirements
+% Correlation threshold for accepting a decoded BCH word.
 threshold = 50;
 
 % Total 2^8 hypotheses of the original symbols before BCH(51,8) encoding 

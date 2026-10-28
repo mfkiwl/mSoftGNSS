@@ -43,8 +43,8 @@ function [trackResults, channel]= trkChannelsParallel(fid, channel, settings)
 
 %% Initialize result structure ====================================
 
-% Channel status: '-' means no tracked signal or lost lock.
-trackResults.status         = '-';      % No tracked signal, or lost lock
+% Channel status: '-' means no tracked signal.
+trackResults.status         = '-';      % No tracked signal
 % Number of coherent integration intervals to process.
 NumToProcess =  round(settings.msToProcess/1000/settings.intTime);
 % Absolute sample index at the start of each tracked E1 code epoch.
@@ -77,7 +77,7 @@ trackResults.remCarrPhase   = inf(1, NumToProcess);
 % Data-branch C/No and PLL lock detector values.
 trackResults.DataCNo  = zeros(1,floor(NumToProcess/settings.CNoInterval));
 trackResults.DataPLD  = zeros(1,floor(NumToProcess/settings.CNoInterval));
-% Pilot and combined L1C C/No values, plus pilot PLL lock detector values.
+% Pilot and combined E1 C/No values, plus pilot PLL lock detector values.
 if (settings.pilotTRKflag == 1)
     trackResults.PilotCNo = zeros(1,floor(NumToProcess/settings.CNoInterval));
     trackResults.PilotPLD  = zeros(1,floor(NumToProcess/settings.CNoInterval));
@@ -127,8 +127,8 @@ PDIcarr = settings.intTime;
 [tau1carr, tau2carr] = calcLoopCoef(settings.pllNoiseBandwidth, ...
     settings.pllDampingRatio, 1.0);
 
-% Primary E1 code length in chips. The local code table below is expanded
-% to the 12-sample-per-chip grid used by the TMBOC/QPSK correlator.
+% Primary E1 code length in chips. Both CBOC and BOC(1,1) local code
+% tables use 12 samples per primary chip for the QPSK correlator.
 codeLength = settings.codeLength;
 % Early-late spacing in primary-code chips, used by the DLL discriminator.
 earlyLateSpc = settings.dllCorrelatorSpacing;
@@ -137,30 +137,39 @@ earlyLateSpc = settings.dllCorrelatorSpacing;
 settings.dllCorrelatorSpacing = settings.dllCorrelatorSpacing*12;
 
 %% Generate the E1 code table for acquired signals =======================
-for channelNr = 1:channelCnt
-    % Generate the L1C data waveform. generateDataBOC11 returns the
-    % BOC(1,1) waveform on a 2-sample-per-chip grid, so repeat by 6 to
-    % align it with the 12-sample-per-chip TMBOC/QPSK correlator grid.
-    E1BCodeD = generateE1Bcode(channel(channelNr).PRN);
-    % Add guard samples at both ends for early/late indexing around the
-    % code boundary.
-    E1BCodeDTable(channelNr,:)  = [E1BCodeD(codeLength*12) E1BCodeD E1BCodeD(1)]; %#ok<AGROW>
+if settings.fullBandEn == 1
+    codeType = 'CBOC';
+elseif settings.fullBandEn == 0
+    codeType = 'BOC11';
+end
 
-    % Generate the L1C pilot TMBOC(6,1,4/33) waveform. It is already
-    % produced on the 12-sample-per-chip local-code grid.
-    E1CCodeP = generateE1Ccode(channel(channelNr).PRN);
-    % Add guard samples for early/late indexing.
-    E1CCodePTable(channelNr,:)  = [E1CCodeP(codeLength*12) E1CCodeP E1CCodeP(1)]; %#ok<AGROW>
+for channelNr = 1:channelCnt
+    % Generate the E1B data waveform as CBOC(+) for full-band tracking
+    % or BOC(1,1) for narrowband tracking. Both are generated directly
+    % on the 12-sample-per-primary-chip local-code grid.
+    E1BCodeD = generateE1Bcode(channel(channelNr).PRN,codeType);
+    % Add 12 guard samples at each end for early/late indexing.
+    E1BCodeDTable(channelNr,:)  = [E1BCodeD(end-11:end) E1BCodeD E1BCodeD(1:12)]; %#ok<AGROW>
+
+    % Generate the E1C pilot waveform as CBOC(-) or BOC(1,1), both
+    % on the 12-sample-per-primary-chip local-code grid.
+    E1CCodeP = generateE1Ccode(channel(channelNr).PRN,codeType);
+    % Add 12 guard samples at each end for early/late indexing.
+    E1CCodePTable(channelNr,:)  = [E1CCodeP(end-11:end) E1CCodeP E1CCodeP(1:12)]; %#ok<AGROW>
 end
 % Data and pilot branches are stored in the shared QPSK table layout for
 % all active channels.
 E1CodeTable = [E1BCodeDTable E1CCodePTable];
 if settings.correlatorType == 1
     % SIMD backend expects one int32 code table shared by all active channels.
+    % Keep four CBOC levels (-2, -1, +1, +2) in full-band SIMD mode.
+    if settings.fullBandEn == 1
+        E1CodeTable = 1.5 * E1CodeTable;
+    end
     E1CodeTable = int32(E1CodeTable');
 elseif settings.correlatorType == 2
-    % GPU backend expects one int8 code table shared by all active channels.
-    E1CodeTable = int8(E1CodeTable');
+    % Preserve the CBOC amplitude weights in the shared GPU code table.
+    E1CodeTable = single(E1CodeTable');
 end
 
 % Select the CPU SIMD backend once before entering the tracking loops.
@@ -296,23 +305,23 @@ for loopCnt =  1:NumToProcess
     % Start index of each channel block within the current rawSignal buffer.
     startIdx = absoluteSample - blkStartIdx + 1;
 
+    % Convert phases to the 12x grid; offset only the correlator input by
+    % 11 points for the additional leading guard samples.
     if settings.correlatorType == 0 % Using MATLAB correlator
-        % remCodePhase and codePhaseStep are converted from primary chips to
-        % the 12x local-code grid before correlation.
         correValues = corrMatlabParallelE1(settings,rawSignal,E1CodeTable, ...
-            remCarrPhase,carrPhaseStep,remCodePhase*12,codePhaseStep*12,...
+            remCarrPhase,carrPhaseStep,remCodePhase*12+11,codePhaseStep*12,...
             startIdx,chSampSize,isDataRead);
     elseif settings.correlatorType == 1 % Using SIMD of CPU
         % Use the CPU SIMD backend selected for the running MATLAB architecture.
         % Uses the same QPSK interface and 12x code phase units.
         correValues = simdCorrelator(settings,rawSignal,E1CodeTable, ...
-            remCarrPhase,carrPhaseStep,remCodePhase*12,codePhaseStep*12,...
+            remCarrPhase,carrPhaseStep,remCodePhase*12+11,codePhaseStep*12,...
             int32(startIdx),int32(chSampSize),isDataRead);
     elseif settings.correlatorType == 2 % Using GPU
         % Compile with: mexcuda corrGPUParallelQPSK.cu
         % Uses the same QPSK interface and 12x code phase units.
         correValues = corrGPUParallelQPSK(settings,rawSignal,E1CodeTable, ...
-            remCarrPhase,carrPhaseStep,remCodePhase*12,codePhaseStep*12,...
+            remCarrPhase,carrPhaseStep,remCodePhase*12+11,codePhaseStep*12,...
             int32(startIdx),int32(chSampSize),isDataRead);
     end
 
@@ -347,7 +356,7 @@ for loopCnt =  1:NumToProcess
 
         if (settings.pilotTRKflag == 1)
             % Pilot prompt phase discriminator. The composite PLL error
-            % gives the pilot branch three times the data-branch weight.
+            % gives the data and pilot branches equal weight.
             pCarrError = atan(p_Q_P/p_I_P)/ (2.0 * pi);
             carrError = ( carrError + pCarrError)/2;
         end
@@ -432,7 +441,7 @@ for loopCnt =  1:NumToProcess
             % Save PLL lock detector output for the data branch.
             trackResults(channelNr).DataPLD(CNoCnt) = PllDetector(1);
 
-            % Save pilot-branch and combined L1C C/No estimates.
+            % Save pilot-branch and combined E1 C/No estimates.
             if (settings.pilotTRKflag == 1)
                 trackResults(channelNr).PilotCNo(CNoCnt) = ...
                     currentCNoValue(2) * 0.5 + cnoSmoothState(channelNr,2) * 0.5;

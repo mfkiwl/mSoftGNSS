@@ -9,11 +9,8 @@ function [CNo, PllDetector]= Calc_CNo_PLD(trackResults,settings,loopCnt)
 %       settings          - Receiver settings
 %       loopCnt           - Iteration index for C/No calculation
 %   Outputs:
-%       CNo               - Estimated C/No for the given values of I and Q
-%                           CNo(1) is for data channel,CNo(21) is for pilot
-%                           channel, and CNo(2) is for the whole L2OC signal  
-%       PllDetector       - PLL lock detector output for data and pilot
-%                            channels
+%       CNo               - C/No in dB-Hz: [L2OCp, 0, L2OCp].
+%       PllDetector       - PLL lock detector output: [L2OCp, 0].
 %
 %--------------------------------------------------------------------------
 % 
@@ -39,8 +36,8 @@ CNo = zeros(1,3);
 PllDetector = zeros(1,2);
 % Integration time for each correlation point
 T = settings.intTime;
-%% ---- C/No and PLL detector output estimations for data channel -----
-% Data-channel prompt correlation values
+%% ---- C/No and PLL detector output estimations for L2OCp -----
+% L2OCp prompt values are stored in the first correlation branch.
 I_P = trackResults.I_P(loopCnt - settings.CNoInterval + 1 : loopCnt);
 Q_P = trackResults.Q_P(loopCnt - settings.CNoInterval + 1 : loopCnt);
 
@@ -65,8 +62,8 @@ NBD = (sum(I_P(I_P>0)) - sum(I_P(I_P<0)))^2 - sum(Q_P)^2;
 % PLL lock detector output
 PllDetector(1) = NBD/NBP;
 
-%% ---- C/No and PLL detector output estimations for pilot channel ----
-% CNo for pilot channel in unit of ratio-Hz
+%% ---- Unused second correlation branch ----------------------------
+% The CSI branch is zero-filled and contributes no carrier power.
 PilotCNo = 0;
 
 

@@ -1,13 +1,10 @@
 function eph= eph_structure_init()
-% This is in order to make sure variable 'eph' for each SV has a similar
-% structure when only one or even none of the three requisite sub-frames
-% is decoded for a given PRN.
+% Initialize the same ephemeris structure for each SV before CNAV-2
+% decoding, including fields not yet received for a given PRN.
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  
 % (C) Written by Yafeng Li, Nagaraj C. Shivaramaiah and Dennis M. Akos
 
-% Reference: Adapted within the CU Multi-GNSS SDR receiver framework for GPS L1C.
-% Signal-specific comments in this file refer to GPS L1C.
 %
 %--------------------------------------------------------------------------
 %This program is free software; you can redistribute it and/or
@@ -34,9 +31,7 @@ function eph= eph_structure_init()
     eph.TOW  = [];          % Computed Time of Week (seconds)
 
     %% ===== Subframe 1: Time of Interval (TOI) =========================
-    % Bits 1-9 in Subframe 1 (implied 9 bits in your decoder)
-    % Note: Your decoder treats TOI as a local variable but uses it for TOW calculation.
-    % We don't strictly need to store it in 'eph' unless you want to persist it.
+    % The nine decoded TOI bits are used locally by ephemeris for TOW.
     
     %% ===== Subframe 2: Ephemeris & Clock (Non-Variable) ===============
     % --- General Data Fields ---

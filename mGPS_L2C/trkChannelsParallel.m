@@ -6,8 +6,7 @@ function [trackResults, channel]= trkChannelsParallel(fid, channel, settings)
 % This implementation tracks all active PRNs together. Each loop reads a
 % shared IF data buffer large enough for the active channel set, calls the
 % selected parallel correlator backend, and then updates the per-channel
-% DLL/PLL states. It is intended to match the tracking behavior of
-% trkChannelsSerial while reducing repeated file I/O and correlator calls.
+% DLL/PLL states.
 %
 %   Inputs:
 %       fid             - File identifier of the IF signal record.
@@ -147,8 +146,8 @@ if settings.correlatorType == 1
     % SIMD backend expects one int32 code table shared by all active channels.
     L2CodeTable = int32(L2CodeTable');
 elseif settings.correlatorType == 2
-    % GPU backend expects one int8 code table shared by all active channels.
-    L2CodeTable = int8(L2CodeTable');
+    % GPU backend expects one single code table shared by all active channels.
+    L2CodeTable = single(L2CodeTable');
 end
 
 %% Initialize tracking variables ==================================
@@ -159,9 +158,7 @@ end
 %--- PLL variables --------------------------------------------------------
 % Coherent integration time used by the carrier loop filter.
 PDIcarr = settings.intTime;
-% Calculate second-order PLL filter coefficients. For L2C the loop is
-% updated every 20 ms, so use unit loop gain; the 1 ms QPSK receivers'
-% k = 0.25 setting makes the discrete carrier loop unstable here.
+% Calculate second-order PLL filter coefficients with unit loop gain.
 [tau1carr, tau2carr] = calcLoopCoef(settings.pllNoiseBandwidth, ...
     settings.pllDampingRatio, 1.0);
 

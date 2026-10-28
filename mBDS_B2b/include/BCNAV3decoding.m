@@ -1,21 +1,19 @@
 function [eph, firstSubFrame,TOW] = BCNAV3decoding(I_P_InputBits, Q_P_InputBits,PRNin)
-% findPreambles finds the first preamble occurrence in the bit stream of
-% each channel. The preamble is verified by check of the spacing between
-% preambles (1sec) and parity checking of the first two words in a
-% subframe. At the same time function returns list of channels, that are in
-% tracking state and with valid preambles in the nav data stream.
+%BCNAV3DECODING Find BDS B2b frames and decode B-CNAV3 messages.
+%Frame polarity is resolved from the preamble. The 972 coded symbols are
+%LDPC-decoded, checked with CRC-24Q, and passed to the ephemeris decoder.
 %
-%[eph, firstSubFrame,TOW] = BCNAV3decoding(I_P_InputBits, Q_P_InputBits)
+%[eph, firstSubFrame,TOW] = BCNAV3decoding(I_P_InputBits,Q_P_InputBits,PRNin)
 %
 %   Inputs:
-%       I_P_InputBits   - Prompt In-phase tracking output (Soft bits)
-%       Q_P_InputBits   - Prompt Quadrature tracking output (Noise reference)
-%
+%       I_P_InputBits   - prompt I output, one value per 1 ms code period.
+%       Q_P_InputBits   - prompt Q output used for noise estimation.
+%       PRNin           - satellite PRN used to check the frame header.
 %   Outputs:
-%       firstSubframe   - Starting positions of the first message...
-%       TOW             - Time Of Week (TOW) ...
-%       eph             - SV ephemeris.
-%
+%       firstSubFrame   - index of the first CRC-valid frame in the 1 ms
+%                       tracking stream; inf if no valid frame is found.
+%       TOW             - BDS second of week of that frame, in seconds.
+%       eph             - decoded satellite ephemeris.
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  
 %--------------------------------------------------------------------------

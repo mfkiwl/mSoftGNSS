@@ -45,7 +45,7 @@ function [trackResults, channel]= trkChannelsSerial(fid, channel, settings)
 %% Initialize result structure ============================================
 
 % Channel status
-trackResults.status         = '-';      % No tracked signal, or lost lock
+trackResults.status         = '-';      % No tracked signal
 
 % The absolute sample in the record of the E5a code start:
 trackResults.absoluteSample = zeros(1, settings.msToProcess);
@@ -108,8 +108,12 @@ PDIcode = settings.intTime;
     settings.dllDampingRatio, 1.0);
 
 %--- PLL variables --------------------------------------------------------
+% Summation interval
+PDIcarr = settings.intTime;
+
 % Calculate filter coefficient values
-[pf3,pf2,pf1] = calcLoopCoefCarr(settings);
+[tau1carr, tau2carr] = calcLoopCoef(settings.pllNoiseBandwidth, ...
+                                    settings.pllDampingRatio, 1.0);
 
 % -------- Number of acquired signals ------------------------------------
 % Number of acquired signals
@@ -179,7 +183,7 @@ for channelNr = 1:settings.numberOfChannels
                 channel(channelNr).codePhase-1), 'bof');
         end
         
-        % Get a vector with the E5aI tiered code sampled 1x/chip
+        % Get a vector with the E5aI primary code sampled 1x/chip
         E5aICode = generateE5aIcode(channel(channelNr).PRN,1);
         % Then make it possible to do early and late versions
         E5aICode = [E5aICode(settings.codeLength) E5aICode E5aICode(1)]; %#ok<AGROW>
@@ -192,8 +196,8 @@ for channelNr = 1:settings.numberOfChannels
             % SIMD serial correlator expects an int32 local code table.
             E5aCodeTable = int32(E5aCodeTable);
         elseif settings.correlatorType == 2
-            % GPU serial correlator expects an int8 local code table.
-            E5aCodeTable = int8(E5aCodeTable);
+            % GPU serial correlator expects a single local code table.
+            E5aCodeTable = single(E5aCodeTable);
         end
         
         %--- Perform various initializations ------------------------------
@@ -212,8 +216,8 @@ for channelNr = 1:settings.numberOfChannels
         oldCodeError = 0.0;
         
         % Carrier/Costas loop parameters
-        d2CarrError  = 0.0;
-        dCarrError   = 0.0;
+        oldCarrNco   = 0.0;
+        oldCarrError = 0.0;
         
         % For C/No computation
         CNoValue = zeros(1,3);
@@ -329,9 +333,10 @@ for channelNr = 1:settings.numberOfChannels
                 carrError = (carrError + carrErrorQ)/2;
             end
             % Implement carrier loop filter and generate NCO command
-            d2CarrError = d2CarrError + carrError * pf3;
-            dCarrError  = d2CarrError + carrError * pf2 + dCarrError;
-            carrNco     = dCarrError + carrError * pf1;
+            carrNco = oldCarrNco + (tau2carr/tau1carr) * ...
+                (carrError - oldCarrError) + carrError * (PDIcarr/tau1carr);
+            oldCarrNco   = carrNco;
+            oldCarrError = carrError;
             
             % Save carrier frequency for current correlation
             trackResults(channelNr).carrFreq(loopCnt) = carrFreq;

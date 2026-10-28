@@ -1,13 +1,15 @@
 function acqResults = acquisitionCPU(fid, settings)
-%Function performs cold start acquisition on the collected "data". It
+%Function performs CPU cold-start acquisition on the recorded IF signal. It
 %searches for GPS L1C signals of all satellites, which are listed in field
 %"acqSatelliteList" in the settings structure. Function saves code phase
 %and frequency of the detected signals in the "acqResults" structure.
+%With pilotACQflag enabled, coarse acquisition combines data/pilot magnitudes
+%with weights 1:3 and fine acquisition uses the pilot. Otherwise both use data.
 %
 %acqResults = acquisitionCPU(fid, settings)
 %
 %   Inputs:
-%       longSignal    - 20 ms of raw IF signal from the front-end.
+%       fid           - File identifier of the recorded IF signal.
 %       settings      - Receiver settings. Provides information about
 %                       sampling and intermediate frequencies and other
 %                       parameters including the list of the satellites to
@@ -25,8 +27,6 @@ function acqResults = acquisitionCPU(fid, settings)
 % Based on the original SoftGNSS SDR framework by Darius Plausinaitis,
 % Peter Rinder, Nicolaj Bertelsen and Dennis M. Akos
 %
-% Reference: Adapted within the CU Multi-GNSS SDR receiver framework for GPS L1C.
-% Signal-specific comments in this file refer to GPS L1C.
 %
 %--------------------------------------------------------------------------
 %This program is free software; you can redistribute it and/or
@@ -67,9 +67,7 @@ if strcmp(settings.dataType,'int16')
 else
     fseek(fid, dataAdaptCoeff*settings.skipNumberOfSamples,'bof');
 end
-% Read data for acquisition: use 20 code length data to do fine
-% acquisition; To ensure at least 20 complete L1C code periods are
-% included, 21 code periods of data are needed
+% Read 21 code periods to retain 20 complete periods (200 ms) after alignment.
 longSignal  = fread(fid, dataAdaptCoeff*21*samplesPerCode, settings.dataType)';
 % Convert complex data into normal representation.
 if (dataAdaptCoeff == 2)
@@ -96,8 +94,8 @@ acqResults.codePhase    = zeros(1, max(settings.acqSatelliteList));
 acqResults.peakMetric   = zeros(1, max(settings.acqSatelliteList));
 
 %--- Variables for fine acquisition ---------------------------------------
-% Code resampling index used by both L1C pilot code fine acquisition and CL phase search.
-% codeValueIndex maps each input sample to the corresponding local code chip.
+% Local-code resampling indices for the 200 ms fine acquisition interval.
+% Each index selects a point on the 12-point-per-primary-chip code grid.
 tc = 1/(settings.codeFreqBasis*12);
 codeValueIndex = floor(ts * (0: 20*samplesPerCode-1)/tc);
 codeValueIndex = rem(codeValueIndex, settings.codeLength*12) + 1;
@@ -111,17 +109,19 @@ for PRN = settings.acqSatelliteList
 
     % Generate L1C data codes and sample them according to the sampling freq.
     DataPriTable = makeDataTable(settings,PRN);
-    % generate local code duplicate to do correlate
+    % Zero-pad one code period for frequency-domain correlation.
     localData = [DataPriTable(1:samplesPerCode), zeros(1,samplesPerCode)];
 
     % Perform DFT of L1C data code
     DataPriFreqDom = conj(fft(localData));
 
-    % Use pilot signal power
+    % Generate the pilot replica for joint data/pilot acquisition.
+    if settings.pilotACQflag
         PilotPriTable = makePilotTable(settings,PRN);
         localPilot = [PilotPriTable(1:samplesPerCode) ...
             zeros(1,samplesPerCode)];
         PilotPriFreqDom = conj(fft(localPilot));
+    end
 
     codePhaseMax = 0; freqMax = 0; peakMax = 0;
     %--- Make the correlation for whole frequency band (for all freq. bins)
@@ -141,10 +141,11 @@ for PRN = settings.acqSatelliteList
         % Perform inverse DFT and store correlation results
         results = abs(ifft(convCodeIQ1));
 
-        % Pilot signal components
-        convCodeIQ1 = IQfreqDom .* PilotPriFreqDom;
-        % Non-coherent combining of data and pilot results
-        results = ( results + abs(ifft(convCodeIQ1)) *3)/4;
+        % Non-coherently combine data/pilot magnitudes with weights 1:3.
+        if settings.pilotACQflag
+            convCodeIQ1 = IQfreqDom .* PilotPriFreqDom;
+            results = ( results + abs(ifft(convCodeIQ1)) *3)/4;
+        end
 
         %--- Look for correlation peaks -----------------------------------
         % Find the max correlation peak and corresponding code phase
@@ -157,7 +158,7 @@ for PRN = settings.acqSatelliteList
 
     end % frqBinIndex = 1:numberOfFrqBins
 
-    %--- Find 1 chip wide L1C code phase exclude range around the peak ----
+    %--- Exclude one primary-code chip on each side of the peak ------------
     excludeIndex1 = codePhaseMax - samplesPerChip;
     excludeIndex2 = codePhaseMax + samplesPerChip;
 
@@ -178,7 +179,7 @@ for PRN = settings.acqSatelliteList
     secondPeak = max(results(codePhaseRange));
     % Save code phase acquisition result
     acqResults.codePhase(PRN) = codePhaseMax;
-    % Store GLRT statistic
+    % Store the primary-to-secondary correlation-peak ratio.
     acqResults.peakMetric(PRN) = peakMax/secondPeak;
 
     % To prevent index from exceeding matrix dimensions in the fine
@@ -193,29 +194,32 @@ for PRN = settings.acqSatelliteList
         % Indicate PRN number of the detected signal
         fprintf('%02d ', PRN);
 
-        % Generate one unresampled L1C pilot code period.
-        L1CPilotCode = generatePilotTMBOC61(settings,PRN);
+        % Select one local-code period on the 12-point-per-primary-chip grid.
+        % Pilot acquisition uses the BOC(1,1) component in either band mode.
+        if settings.pilotACQflag
+            L1CCode = generatePilotTMBOC61(settings,PRN,'BOC11');
+        else
+            L1CCode = generateDataBOC11(PRN);
+        end
 
-        % Resample the local pilot code over 200 ms
-        L1CPilotCode200ms = L1CPilotCode(codeValueIndex);
+        % Resample the selected local code over 200 ms.
+        L1CCode200ms = L1CCode(codeValueIndex);
 
-        % Extract 10 L1C pilot code periods (200 ms) of incoming signal starting from the
-        % detected L1C pilot code phase.
+        % Extract 200 ms of input from the detected code phase.
         sig200ms = longSignal(codePhaseMax:codePhaseMax + 20*samplesPerCode -1);
 
         % Coarse-frequency local carrier used before fine frequency estimate.
         localCarr200cm = exp(-1i * freqMax * finePhasePoints);
 
         %--- Integration for each 1 ms segment over 200 ms -----------------
-        % Wipe off the L1C pilot code and coarse carrier from the incoming signal.
-        basebandSig = sig200ms .* L1CPilotCode200ms .* localCarr200cm;
-        % Sum each 1 ms segment; the resulting 200-point sequence is used for
-        % fine carrier estimation. Squaring removes the 180-degree data sign
-        % transitions before the FFT-based frequency estimate.
+        % Wipe off the selected local code and coarse carrier.
+        basebandSig = sig200ms .* L1CCode200ms .* localCarr200cm;
+        % Integrate each 1 ms segment. Squaring removes data/overlay sign
+        % transitions before the 200-point FFT-based frequency estimate.
         sumPerCode = sum(reshape(basebandSig,[],200));
 
         %--- Find the fine carrier freq. ----------------------------------
-        % Index of the strongest spectral component after data-bit removal.
+        % Index of the strongest spectral component after sign removal.
         [~,maxPowerIndex]  = max(abs(fft(sumPerCode.^2)));
         % Convert FFT-bin phase to carrier frequency correction. The division
         % by two compensates for the squaring operation above.

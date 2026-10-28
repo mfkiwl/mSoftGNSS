@@ -117,7 +117,7 @@ for PRN = settings.acqSatelliteList
     % Perform DFT of B1C data code
     DataPriFreqDom = conj(fft(localData));
 
-    % Use pilot signal power only when pilot-assisted acquisition is enabled.
+    % Generate the pilot replica for pilot-assisted acquisition.
     if settings.pilotACQflag
         PilotPriTable = makePilotTable(settings,PRN);
         localPilot = [PilotPriTable(1:samplesPerCode) ...
@@ -144,7 +144,7 @@ for PRN = settings.acqSatelliteList
         results = abs(ifft(convCodeIQ1));
 
         if settings.pilotACQflag
-            % Pilot signal components; combine data and pilot power 1:3.
+            % Combine data and pilot correlation magnitudes with weights 1:3.
             convCodeIQ1 = IQfreqDom .* PilotPriFreqDom;
             results = (results + 3*abs(ifft(convCodeIQ1)))/4;
         end
@@ -181,7 +181,7 @@ for PRN = settings.acqSatelliteList
     secondPeak = max(results(codePhaseRange));
     % Save code phase acquisition result
     acqResults.codePhase(PRN) = codePhaseMax;
-    % Store GLRT statistic
+    % Store the primary-to-secondary correlation-peak ratio.
     acqResults.peakMetric(PRN) = peakMax/secondPeak;
 
     % To prevent index from exceeding matrix dimensions in the fine

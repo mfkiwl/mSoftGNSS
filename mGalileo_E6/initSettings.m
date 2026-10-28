@@ -64,7 +64,7 @@ settings.fileType           = 2;
 settings.IF                 = 0.0e6;   % [Hz] 
 settings.samplingFreq       = 30e6;             % [Hz] 
 settings.codeFreqBasis      = 5.115e6;              % [Hz]
-% Define number of chips in a E6B tiered code period
+% Define the number of chips in an E6B primary-code period.
 settings.codeLength          = 5115;
 
 %% Acquisition settings ===========================================

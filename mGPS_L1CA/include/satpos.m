@@ -184,7 +184,6 @@ for satNr = 1 : numOfSatellites
 %     % Relativistic correction
 %     dtrRat = F * eph(prn).e * eph(prn).sqrtA * cos(E) *dE;
 %     
-% 	% The clock drift is relative small, thus can be neglectde at most time.
 %     satClkCorrRat(satNr) = 2* eph(prn).a_f2 * dt + eph(prn).a_f1 + dtrRat;                    
    
 end % for satNr = 1 : numOfSatellites

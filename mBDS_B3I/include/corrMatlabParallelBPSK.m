@@ -2,9 +2,7 @@ function correValues = corrMatlabParallelBPSK(settings, rawSignal, caCodeTable, 
     remCarrPhase, carrPhaseStep, remCodePhase, codePhaseStep, ...
     startIdx, chSampSize, isDataRead)
 %CORRBPSKMATLABPARALLEL Matlab implementation of the tracking correlator.
-%   This function keeps the same calling interface as the SIMD / GPU
-%   correlators so it can be used directly in trkChannelsParallel.m when
-%   settings.correlatorType == 0.
+%   Correlate each active channel against a shared IF-data buffer.
 %
 %   Input/output layout follows the MEX correlators:
 %       correValues = [I_E; Q_E; I_P; Q_P; I_L; Q_L]

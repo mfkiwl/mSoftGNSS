@@ -1,27 +1,19 @@
 function [eph, subFrameStart,SOW] = NAVdecoding(I_P_InputBits,PRN)
 
-% findPreambles finds the first preamble occurrence in the bit stream of
-% each channel. The preamble is verified by check of the spacing between
-% preambles (6sec) and parity checking of the first two words in a
-% subframe. At the same time function returns list of channels, that are in
-% tracking state and with valid preambles in the nav data stream.
+%NAVDECODING Find BDS B1I/B2I preambles and decode D1/D2 navigation data.
+%Preamble spacing is checked at 6 s for D1 and 0.6 s for D2. The BCH
+%codeword in the first navigation word is checked before decoding.
 %
-%[eph, subFrameStart,SOW] = CNAVdecoding(I_P_InputBits)
+%[eph, subFrameStart,SOW] = NAVdecoding(I_P_InputBits,PRN)
 %
 %   Inputs:
-%       I_P_InputBits   - output from the tracking function
-%
+%       I_P_InputBits   - prompt I output, one value per 1 ms code period.
+%       PRN             - satellite PRN; selects the D1 or D2 message.
 %   Outputs:
-%       subFrameStart   - Starting positions of the first message in the
-%                       input bit stream I_P_InputBits in each channel.
-%                       The position is CNAV bit(20ms before convolutional decoding)
-%                       count since start of tracking. Corresponding value will
-%                       be set to inf if no valid preambles were detected in
-%                       the channel.
-%       SOW             - Time Of Week (SOW) of the first message(in seconds).
-%                       Corresponding value will be set to inf if no valid preambles
-%                       were detected in the channel.
-%       eph             - SV ephemeris.
+%       subFrameStart   - index of the first valid subframe/page in the
+%                       1 ms tracking stream; inf if synchronization fails.
+%       SOW             - BDS second of week at that subframe/page, in seconds.
+%       eph             - decoded satellite ephemeris.
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  
@@ -90,7 +82,7 @@ if ((1 <= PRN) && (PRN <=5 )) || (PRN >= 59 && PRN <= 63)
     tlmXcorrResult = xcorr(bits, preamble_D2);
     codrPerD = 2;
     
-    % MEO/IGSO satellites. Not modulated with NM code.
+    % MEO/IGSO satellites use the 20-chip NH overlay.
 elseif (PRN >= 6) && (PRN <= 58)
     
     % Correlate tracking output with the preamble
@@ -113,10 +105,7 @@ index = find(...
 % Analyze detected preamble-like patterns ================================
 for i = 1:length(index) % For each occurrence
     
-    %--- Find distances in time between this occurrence and the rest of
-    %preambles like patterns. If the distance is 6000 milliseconds (one
-    %subframe), the do further verifications by validating the parities
-    %of two GPS words
+    % Verify the 300-bit subframe/page interval: 6 s for D1, 0.6 s for D2.
     
     index2 = index - index(i);
     
@@ -133,7 +122,7 @@ for i = 1:length(index) % For each occurrence
         % The index is pointing at the start of TLM word.
         bits = I_P_InputBits(index(i): index(i) + 30 * codrPerD -1)';
         
-        %--- Combine the 20 values of each bit ------------------------
+        %--- Sum the tracking values within each navigation bit -------
         bits = reshape(bits, codrPerD, (size(bits, 1) / codrPerD));
         bits = sum(bits);
         
@@ -148,7 +137,7 @@ for i = 1:length(index) % For each occurrence
         % Decode the received signal in code using an [15,11] BCH decoder
         [~,cnumerr] = bchdec(bits,15,11);
         
-        %--- Check the parity of the TLM and HOW words ----------------
+        %--- Accept a first-word BCH codeword with no errors ---------
         if cnumerr == 0
             % Parity was OK. Record the preamble start position. Skip
             % the rest of preamble pattern checking for this channel
@@ -185,7 +174,7 @@ if (1 <= PRN) && (PRN <=5 ) || (PRN >= 59 && PRN <= 63)
     navBitsSamples = reshape(navBitsSamples, ...
         2, (size(navBitsSamples, 1) / 2));
     
-    % MEO/IGSO satellites. Not modulated with NM code.
+    % MEO/IGSO satellites use the 20-chip NH overlay.
 elseif PRN >= 6 && PRN <= 58
     %--- Copy 5 sub-frames long record from tracking output ---------------
     % 1 frame has 1500 bits (5 subframes) and 1 bit is 20ms.

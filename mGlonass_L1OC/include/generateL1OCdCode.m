@@ -1,14 +1,12 @@
 function L1OcdCode = generateL1OCdCode(PRN, settings)
-% generateL1OcdCode.m generates one GLONASS L1OCd PRN code.
+% generateL1OCdCode.m generates one GLONASS L1OCd PRN code.
 %
-% L1OcdCode = generateL1OcdCode(PRN, settings)
+% L1OcdCode = generateL1OCdCode(PRN, settings)
 %
 %   Inputs:
 %       PRN       - GLONASS L1OC SV ID number, 0...63. PRN 0 is reserved
 %                   in the ICD, but is kept here for test-vector checking.
-%       settings  - receiver settings structure. It is kept for the same
-%                   calling style as the L1OC code generator. This function
-%                   does not require any field from settings.
+%       settings  - receiver settings (unused).
 %
 %   Outputs:
 %       L1OcdCode - return-zero/TDM-form code sequence. The non-zero chips

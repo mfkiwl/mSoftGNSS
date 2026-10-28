@@ -1,27 +1,19 @@
 function [eph, firstSubFrame,TOW] = NAVdecoding(I_P)
 
-% findPreambles finds the first preamble occurrence in the bit stream of
-% each channel. The preamble is verified by check of the spacing between
-% preambles (6sec) and parity checking of the first two words in a
-% subframe. At the same time function returns list of channels, that are in
-% tracking state and with valid preambles in the nav data stream.
+%Find a CRC-valid Galileo I/NAV page boundary and decode ephemeris data.
+%Preamble spacing and convolutional decoding are checked before CRC-24Q.
 %
-%[eph, subFrameStart,SOW] = CNAVdecoding(I_P_InputBits)
+%[eph, firstSubFrame, TOW] = NAVdecoding(I_P)
 %
 %   Inputs:
-%       I_P_InputBits   - output from the tracking function
+%       I_P             - prompt-I tracking outputs at 1 ms intervals.
 %
 %   Outputs:
-%       firstSubFrame   - Starting positions of the first message in the
-%                       input bit stream I_P_InputBits in each channel.
-%                       The position is CNAV bit(20ms before convolutional decoding)
-%                       count since start of tracking. Corresponding value will
-%                       be set to inf if no valid preambles were detected in
-%                       the channel.
-%       SOW             - Time Of Week (SOW) of the first message(in seconds).
-%                       Corresponding value will be set to inf if no valid preambles
-%                       were detected in the channel.
-%       eph             - SV ephemeris.
+%       eph             - decoded satellite ephemeris and message flags.
+%       firstSubFrame   - one-based page-start index in I_P, or inf when no
+%                         valid candidate is found.
+%       TOW             - decoded GST time-of-week reference [s], or inf
+%                         when no valid candidate is found.
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR
@@ -49,9 +41,7 @@ function [eph, firstSubFrame,TOW] = NAVdecoding(I_P)
 
 
 %--- Initialize ephemeris structure  --------------------------------------
-% This is in order to make sure variable 'eph' for each SV has a similar
-% structure when only one or even none of the three requisite messages
-% is decoded for a given PRN.
+% Initialize ephemeris fields before decoding the available navigation pages.
 eph = eph_structure_init();
 
 % Preamble search can be delayed to a later point in the tracking results
@@ -67,7 +57,7 @@ TOW = inf;
 %Creates a cyclic redundancy code (CRC) detector System object
 crcDet = comm.CRCDetector([24 23 18 17 14 11 10 7 6 5 4 3 1 0]);
 
-% Convert CNAV-producing convolutional code polynomials to trellis description
+% Rate-1/2, constraint-length-7 Galileo I/NAV convolutional-code trellis.
 % Note that the difference from GPS is that the second branch G2 is
 % inverted at the end (see ICD)
 trellis = poly2trellis(7,[171 133]);
@@ -112,14 +102,14 @@ for ind = 1:numel(index) % For each occurrence
     % Check distance to all other possible sync patterns for current start
     index2 = index - index(ind);
     %     index(ind)
-    % Check spacing, need two 250 symbol pages (even and odd)
+    % Require the next 250-symbol page part and 15 complete page pairs.
     if (~isempty(find(index2 == 250*4,1)))&& ...
             ( length(bits(index(ind):end))> 7500*4 )
         %=== Read bit values for CRC-24Q check and ephemeris decoding ======
         % Search every possible preamble pattern.
         temp_bits = bits(index(ind):index(ind)+ 7500*4 -1);
         
-        % Group every 10 I_P to a row for corresponding bit
+        % Group four 1 ms prompt values per encoded symbol.
         I_P_group = reshape(temp_bits,4,[])';
         
         % Wipe off the 2nd code and form data bits
@@ -190,5 +180,5 @@ for ind = 1:numel(index) % For each occurrence
             break
         end % if CRC is OK ...
         
-    end % Check spacing, need two 250 symbol pages (even and odd)
+    end % Page-part spacing and available-data checks
 end % for ind = 1:size(index)

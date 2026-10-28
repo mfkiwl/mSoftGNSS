@@ -1,7 +1,7 @@
 function CAcode = generateB12Icode(PRN)
-% generateB12Icode.m generates one of the 37 Beidou satellite B1I codes.
+% generateB12Icode.m generates one of the 63 BDS B1I/B2I codes.
 %
-% B12Icode = generateB12IcodeBDS(PRN)
+% B12Icode = generateB12Icode(PRN)
 %
 %   Inputs:
 %       PRN         - PRN number of the sequence.

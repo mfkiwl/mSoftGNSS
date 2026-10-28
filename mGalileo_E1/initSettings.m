@@ -91,10 +91,12 @@ settings.trkMode                 = 1;    % 0 - Channel-serial tracking;
 settings.correlatorType          = 2;    % 0 - Matlab correlator;
                                          % 1 - SIMD correlator;
                                          % 2 - GPU correlator;
+% Enable/disable full-band tracking using the BoC(6,1) component
+settings.fullBandEn       = 1;           % 0 - Narrowband; 1 - Full band
 % Number of right-shift bits for IF data to prevent SIMD correlator
 % overflow when ADC valid bits occupy the high bits
 if settings.correlatorType == 1
-    settings.rShiftBits          = 5;   % 0 - No shift;
+    settings.rShiftBits          = 4;   % 0 - No shift;
 end
 % Code tracking loop parameters
 settings.dllDampingRatio         = 0.7;

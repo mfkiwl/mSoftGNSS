@@ -167,7 +167,7 @@ for PRN = settings.acqSatelliteList
     secondPeak = max(results(codePhaseRange));
     % Save code phase acquisition result
     acqResults.codePhase(PRN) = codePhaseMax;
-    % Store GLRT statistic
+    % Store the primary-to-secondary correlation-peak ratio.
     acqResults.peakMetric(PRN) = peakMax/secondPeak;
     
     % If the result is above threshold, then there is a signal ...

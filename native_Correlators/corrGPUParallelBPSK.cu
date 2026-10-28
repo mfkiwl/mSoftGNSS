@@ -6,7 +6,6 @@
  * Time: Feb, 20, 2026
  *
  * Notes:
- *   - Input/Output interface is kept compatible with the original implementation.
  *   - fileType = 1: real IF samples [I0 I1 I2 ...]
  *   - fileType = 2: complex interleaved IF samples [I0 Q0 I1 Q1 ...]
  *   - Output layout is 6 x channelCnt:
@@ -28,7 +27,7 @@
 /* Settings struct -------------------------------------------------------------
  * trkMode        : 0 - channel-serial tracking; 1 - channel-parallel tracking
  * fileType       : 1 - real samples; 2 - complex samples
- * earlyLateSpc   : half of the early - late code correlation spacing (chips)
+ * earlyLateSpc   : half of the early-late spacing in code-table points
  *------------------------------------------------------------------------------*/
 typedef struct {
     int trkMode;
@@ -62,10 +61,10 @@ struct GPU_Complex
 	float i;
 	__host__ __device__ GPU_Complex() : r(0.0f), i(0.0f) {};
 
-	// Constructor for a complex number with real amd imag parts of float
+	// Constructor for a complex number with float real and imaginary parts
     __host__ __device__ GPU_Complex(float realPart, float imagPart) : r(realPart), i(imagPart) {}
 
-	// Magnitude of a complex number
+	// Squared magnitude of a complex number
 	__host__ __device__ float magnitude2() { return r * r + i * i; }
 
 	__device__ GPU_Complex operator*(const GPU_Complex& a) {
@@ -245,7 +244,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
 		// Get device pointer from host memory
 		CUDA_CHECK(cudaHostGetDevicePointer(&d_corrValues, h_corrValues, 0));
 
-		/* ------- Alloctate CUDA streams ------- */
+		/* ------- Allocate CUDA streams ------- */
 		streams = (cudaStream_t*)malloc(channelCnt * sizeof(cudaStream_t));
 		if (!streams) {
 			mexErrMsgIdAndTxt("gpuCorr:", "Failed to allocate streams memory.");
@@ -349,7 +348,7 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[])
  */
 __global__ void mixCarrReal(const short* d_pRawSignal, GPU_Complex* d_BasebandSignal,int blksize, float remCarrPhase,float carrPhaseStep)
 {
-	// CUDA version of floating point NCO and vector dot product integrated
+	// Generate the carrier replica and wipe off the carrier.
 	
 	for (int index = blockIdx.x * blockDim.x + threadIdx.x; index < blksize; index += blockDim.x * gridDim.x){
 		float sin, cos;
@@ -367,7 +366,7 @@ __global__ void mixCarrReal(const short* d_pRawSignal, GPU_Complex* d_BasebandSi
 __global__ void mixCarrComplex(const short* d_pRawSignal, GPU_Complex* d_BasebandSignal,
 	int blksize, float remCarrPhase, float carrPhaseStep)
 {
-	// CUDA version of floating point NCO and vector dot product integrated
+	// Generate the carrier replica and wipe off the carrier.
 	const short2* d_pRawSignalIQ = reinterpret_cast<const short2*>(d_pRawSignal);
 	for (int index = blockIdx.x * blockDim.x + threadIdx.x; index < blksize; index += blockDim.x * gridDim.x) {
 		float sin, cos;

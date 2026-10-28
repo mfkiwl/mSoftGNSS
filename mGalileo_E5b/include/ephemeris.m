@@ -1,11 +1,20 @@
 function [eph] = ephemeris(navBits,eph)
+%Decode Galileo I/NAV pages and collect the requisite ephemeris fields.
+%
+%eph = ephemeris(navBits,eph)
+%
+%   Inputs:
+%       navBits - at least 7500 encoded navigation symbols represented as 0/1.
+%       eph     - ephemeris structure, reinitialized before decoding.
+%   Outputs:
+%       eph     - decoded fields and flags for the requisite message types.
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR
 % (C) Written by Yafeng Li, Nagaraj C. Shivaramaiah and Dennis M. Akos
 %--------------------------------------------------------------------------
 
 %% Check if there is enough data ==========================================
-% This is 15 full pages (one subframe)
+% Fifteen I/NAV page pairs contain 7500 encoded symbols.
 if length(navBits) < 7500
     error('The ephemeris bitstream must contain 7500 symbols!');
 end
@@ -13,7 +22,7 @@ end
 %--- Check polarity of the data bits ----------------------------------
 sync_bits = [0 1 0 1 1 0 0 0 0 0];
 
-% Convert CNAV-producing convolutional code polynomials to trellis description
+% Rate-1/2, constraint-length-7 Galileo I/NAV convolutional-code trellis.
 % Note that the difference from GPS is that the second branch G2 is
 % inverted at the end (see ICD)
 trellis = poly2trellis(7,[171 133]);

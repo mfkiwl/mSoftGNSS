@@ -1,18 +1,13 @@
 function E5bQCodesTable = makeE5bQTable(settings,PRN)
-%Function generates E5bQ primary codes for specified satellites based on the settings
-%provided in the structure "settings". The codes are digitized at the
-%sampling frequency specified in the settings structure.
-%One row in the "E5bQCodesTable" is one E5bQ primary code. The row number is the PRN
-%number of the E5bQ code.
+%Sample one E5bQ primary-code period at settings.samplingFreq.
 %
-%E5bQCodesTable = makeE5bQTable(PRN,settings)
+%E5bQCodesTable = makeE5bQTable(settings,PRN)
 %
 %   Inputs:
 %       settings          - receiver settings
 %       PRN               - PRN number of the sequence.
 %   Outputs:
-%       E5aICodesTable    - an array of arrays (matrix) containing E5bQ codes
-%                       for the specified PRN
+%       E5bQCodesTable    - row vector of code samples for the specified PRN
 
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR  
@@ -50,7 +45,7 @@ E5bQCode = generateE5bQcode(PRN,1);
 
 %=== Digitizing =======================================================
 
-%--- Make index array to read E5a code values -------------------------
+%--- Make index array to read E5bQ code values -------------------------
 % The length of the index array depends on the sampling frequency -
 % number of samples per millisecond (because one primary code period is one
 % millisecond).

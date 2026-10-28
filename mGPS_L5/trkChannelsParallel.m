@@ -114,11 +114,11 @@ absoluteSample = settings.skipNumberOfSamples + ...
 
 % Generate the L5 code table for acquired signals
 for channelNr = 1:channelCnt
-    % Get a vector with the L5C data code sampled 1x/chip
+    % Generate the L5I data code at one point per chip.
     L5ICode = generateL5Icode(channel(channelNr).PRN,settings);
     % Then make it possible to do early and late versions
     L5ICodeTable(channelNr,:)  = [L5ICode(end) L5ICode L5ICode(1)]; %#ok<AGROW>
-    % Get a vector with the L5C pilot code sampled 1x/chip
+    % Generate the L5Q pilot code at one point per chip.
     L5QCode = generateL5Qcode(channel(channelNr).PRN,settings);
     % Then make it possible to do early and late versions
     L5QCodeTable(channelNr,:)  = [L5QCode(end) L5QCode L5QCode(1)]; %#ok<AGROW>
@@ -128,8 +128,8 @@ if settings.correlatorType == 1
     % SIMD backend expects one int32 code table shared by all active channels.
     L5CodeTable = int32(L5CodeTable');
 elseif settings.correlatorType == 2
-    % GPU backend expects one int8 code table shared by all active channels.
-    L5CodeTable = int8(L5CodeTable');
+    % GPU backend expects one single code table shared by all active channels.
+    L5CodeTable = single(L5CodeTable');
 end
 
 %% Initialize tracking variables ==================================
@@ -329,7 +329,7 @@ for loopCnt =  1:codePeriods
         % Combined code tracking error estimation using data and pilot
         % chaannel signals
         if (settings.pilotTRKflag == 1)
-        % L5C pilot channel carrier phase is pi/2 rad ahead of the
+        % L5Q pilot-channel carrier phase is pi/2 rad ahead of the
         % data channel carrier phase. Here we rotate the pilot
         % channel phase pi/2 back to the data channel phase.
             QI = (pilot_I_P + 1i * pilot_Q_P) * exp(-1i * pi/2);

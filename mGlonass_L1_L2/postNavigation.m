@@ -42,14 +42,9 @@ function [navSolutions, eph] = postNavigation(trackResults, settings)
 
 
 %% Check is there enough data to obtain any navigation solution ===========
-% It is necessary to have at least three subframes (number 1, 2 and 3) to
-% find satellite coordinates. Then receiver position can be found too.
-% The function requires all 5 subframes, because the tracking starts at
-% arbitrary point. Therefore the first received subframes can be any three
-% from the 5.
-% One subframe length is 6 seconds, therefore we need at least 30 sec long
-% record (5 * 6 = 30 sec = 30000ms). We add extra seconds for the cases,
-% when tracking has started in a middle of a subframe.
+% Orbit and clock data come from strings 1--4; string 5 provides the time
+% correction. A frame contains fifteen 2 s strings. The 36 s input check
+% allows for tracking that starts partway through a frame.
 
 if (settings.msToProcess < 36000) 
     % Show the error message and exit

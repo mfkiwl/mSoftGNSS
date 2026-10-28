@@ -38,8 +38,7 @@ function [flag,decodedBits] = BCH21_6Decoding(bits)
 %CVS record:
 %$Id: BCH21_6Decoding.m,v 1.1.2.5 2018/07/24 22:00:00 dpl Exp $
 
-% Threshold for determining the success or fail of the decoding. This value
-% can be reconfigured according to specific requirements
+% Correlation threshold for accepting a decoded BCH word.
 threshold = 20;
 
 % Total 2^6 hypotheses of the original symbols before BCH(21,6) encoding 

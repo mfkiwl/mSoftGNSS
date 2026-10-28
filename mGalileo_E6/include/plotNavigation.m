@@ -76,9 +76,7 @@ if (~isempty(navSolutions))
      
     figureNumber = 300;
     % The 300 is chosen for more convenient handling of the open
-    % figure windows, when many figures are closed and reopened. Figures
-    % drawn or opened by the user, will not be "overwritten" by this
-    % function if the auto numbering is not used.
+    % figure windows, when many figures are closed and reopened.
  
     %=== Select (or create) and clear the figure ==========================
     figure(figureNumber);

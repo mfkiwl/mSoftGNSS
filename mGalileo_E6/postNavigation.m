@@ -15,7 +15,7 @@ function [navSolutions, eph] = postNavigation(trackResults, settings)
 % supply the independent broadcast ephemeris and GST synchronization needed
 % to treat TOH as TOW or to form a standalone position solution.
 
-%% Collect physical pages from every locked tracking channel ==============
+%% Collect physical pages from every active tracking channel ==============
 pageRecords = struct('rxTime', {}, 'absoluteSample', {}, 'PRN', {}, ...
     'pageBits', {});
 activeChnList = find([trackResults.status] ~= '-');

@@ -2,16 +2,11 @@ function correValues = corrMatlabParallelTMBPSK(settings, rawSignal, L2CodeTable
     remCarrPhase, carrPhaseStep, remCodePhase, codePhaseStep, ...
     startIdx, chSampSize, isDataRead)
 %CORRMATLABPARALLELTMBPSK MATLAB channel-parallel GLONASS L2OC tracking correlator.
-%   This function keeps the same calling interface as the SIMD / GPU
-%   correlators so it can be used directly in trkChannelsParallel.m when
-%   settings.correlatorType == 0.
+%   Correlate each active channel against a shared IF-data buffer.
 %
 %   Input code-table layout for MATLAB mode:
-%       L2CodeTable(channel,:) = [L2OCp code with guard chips, ...
-%                                 L2OCp overlay code with guard chips]
-%   The first half is the repeated L2OCp primary branch, and the second half is
-%   the L2OCp overlay branch. Each branch already includes one wraparound chip on
-%   both sides, so ceil(codePhase) + 1 can be used safely for E/P/L indexing.
+%       L2CodeTable(channel,:) = [L2OCp TDM/BOC code, zero-filled CSI branch]
+%   Each branch includes one wraparound table point at each end.
 %
 %   Input/output layout follows the SIMD / GPU correlators:
 %       correValues = [I_E; Q_E; I_P; Q_P; I_L; Q_L;
@@ -47,8 +42,7 @@ for channelNr = 1:channelCnt
     blksize = chSampSize(channelNr);
     codeStartIdx = startIdx(channelNr);
 
-    % Get the local L2OC code table for the current channel. The first half
-    % is the L2OCp primary branch; the second half is the L2OCp overlay branch.
+    % Select the L2OCp branch; the second, CSI branch is unused.
     l2cCode = L2CodeTable(channelNr, :);
     codeLen = length(l2cCode) / 2;
     cmCode = l2cCode(1:codeLen);
@@ -66,17 +60,17 @@ for channelNr = 1:channelCnt
     sampleIndex = 0:blksize-1;
     codePhase = remCodePhase(channelNr) + codePhaseStep(channelNr) .* sampleIndex;
 
-    % Define index into early CM / L2OCp overlay code vectors.
+    % Define index into the early L2OCp code vector.
     tcode = ceil(codePhase - earlyLateSpc) + 1;
     earlyCode = cmCode(tcode);
     
 
-    % Define index into late CM / L2OCp overlay code vectors.
+    % Define index into the late L2OCp code vector.
     tcode = ceil(codePhase + earlyLateSpc) + 1;
     lateCode = cmCode(tcode);
     
 
-    % Define index into prompt CM / L2OCp overlay code vectors.
+    % Define index into the prompt L2OCp code vector.
     tcode = ceil(codePhase) + 1;
     promptCode = cmCode(tcode);
     

@@ -4,7 +4,7 @@ function [eph] = ephemeris_B2b(navBitsBin,eph)
 %the array must be the first bit of a subframe.
 %
 %
-%[eph] = ephemeris(navBitsBin,eph)
+%[eph] = ephemeris_B2b(navBitsBin,eph)
 %
 %   Inputs:
 %       navBitsBin  - bits of the navigation messages.Type is character array
@@ -54,7 +54,7 @@ if a > b
     navBitsBin = navBitsBin';
 end
 
-% Pi used in the GPS coordinate system
+% Pi specified for the BDS broadcast-ephemeris calculations
 gpsPi = 3.1415926535898;
 
 % Decode the message id

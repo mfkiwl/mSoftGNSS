@@ -1,4 +1,13 @@
 function E6C_secondary = generateE6C_secondary(PRN)
+%Generate the 100-chip Galileo E6C secondary code in bipolar form (-1,+1).
+%
+%E6C_secondary = generateE6C_secondary(PRN)
+%
+%   Inputs:
+%       PRN           - satellite PRN number, 1 to 50.
+%   Outputs:
+%       E6C_secondary - row vector containing one secondary-code period.
+%
 %% Secondary code table from Galileo_E6BC_SIS_Technical_Note
 secondary_code = [ ...
 '83F6F69D8F6E15411FB8C9B1C', '66558BD3CE0C7792E83350525', ...

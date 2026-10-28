@@ -1,6 +1,6 @@
 function Secondary = generate2ndCode(PRN)
 % Generate the GPS L1C pilot secondary code in bipolar format (-1, +1).
-% This implementation supports PRNs 1 to 63, which use the single-LFSR form.
+% PRNs 1 to 63 use the single-LFSR form.
 %
 % Secondary = generate2ndCode(PRN)
 %
@@ -13,7 +13,6 @@ function Secondary = generate2ndCode(PRN)
 %--------------------------------------------------------------------------
 %                         CU Multi-GNSS SDR
 % Original authors: Yafeng Li, Nagaraj C. Shivaramaiah and Dennis M. Akos
-% Reference: Adapted within the CU Multi-GNSS SDR receiver framework for GPS L1C.
 %--------------------------------------------------------------------------
 
 %% Check the supported PRN range.

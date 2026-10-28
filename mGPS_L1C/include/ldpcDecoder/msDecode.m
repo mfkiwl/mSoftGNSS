@@ -1,9 +1,8 @@
 function [decodedCodeword, realIter] = msDecode(llr, hMatrix, settings)
 %MSDECODE Min-Sum LDPC decoder for GPS L1C CNAV-2.
-%   decodedCodeword = MSDECODE(llr, hMatrix, settings) decodes the input
-%   LLR vector using the supplied parity-check matrix. This keeps the SDR
-%   receiver on its existing H2/H3 matrices while using the Min-Sum message
-%   update logic from the standalone GPS L1C decoder.
+%   [decodedCodeword, realIter] = msDecode(llr, hMatrix, settings) decodes
+%   input LLRs using the supplied H2 or H3 parity-check matrix and Min-Sum
+%   message updates. Returns the hard-decision codeword and iteration count.
 
 if nargin == 2
     settings = hMatrix;
